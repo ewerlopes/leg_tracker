@@ -49,12 +49,12 @@
 #include <opencv2/ml.hpp>
 
 // Local headers
-#include <leg_tracker/laser_processor.h>
-#include <leg_tracker/cluster_features.h>
+#include <player_tracker/laser_processor.h>
+#include <player_tracker/cluster_features.h>
 
 // Custom messages
-#include <leg_tracker/Leg.h>
-#include <leg_tracker/LegArray.h>
+#include <player_tracker/Leg.h>
+#include <player_tracker/LegArray.h>
 
 
 
@@ -107,7 +107,7 @@ public:
     // ROS subscribers + publishers
     scan_sub_ =  nh_.subscribe(scan_topic, 10, &DetectLegClusters::laserCallback, this);
     markers_pub_ = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 20);
-    detected_leg_clusters_pub_ = nh_.advertise<leg_tracker::LegArray>("detected_leg_clusters",20);
+    detected_leg_clusters_pub_ = nh_.advertise<player_tracker::LegArray>("detected_leg_clusters",20);
   }
 
 private:
@@ -155,7 +155,7 @@ private:
     // OpenCV matrix needed to use the OpenCV random forest classifier
     CvMat* tmp_mat = cvCreateMat(1, feat_count_, CV_32FC1); 
     
-    leg_tracker::LegArray detected_leg_clusters;
+    player_tracker::LegArray detected_leg_clusters;
     detected_leg_clusters.header.frame_id = scan->header.frame_id;
     detected_leg_clusters.header.stamp = scan->header.stamp;
 
@@ -186,7 +186,7 @@ private:
     }
     
     // Store all processes legs in a set ordered according to their relative distance to the laser scanner
-    std::set <leg_tracker::Leg, CompareLegs> leg_set;
+    std::set <player_tracker::Leg, CompareLegs> leg_set;
     if (!transform_available)
     {
       ROS_INFO("Not publishing detected leg clusters because no tf was available");
@@ -231,7 +231,7 @@ private:
             if (transform_successful_2)
             {  
               // Add detected cluster to set of detected leg clusters, along with its relative position to the laser scanner
-              leg_tracker::Leg new_leg;
+              player_tracker::Leg new_leg;
               new_leg.position.x = position[0];
               new_leg.position.y = position[1];
               new_leg.confidence = probability_of_leg;
@@ -247,10 +247,10 @@ private:
     // They are ordered from closest to the laser scanner to furthest  
     int clusters_published_counter = 0;
     int id_num = 1;      
-    for (std::set<leg_tracker::Leg>::iterator it = leg_set.begin(); it != leg_set.end(); ++it)
+    for (std::set<player_tracker::Leg>::iterator it = leg_set.begin(); it != leg_set.end(); ++it)
     {
       // Publish to /detected_leg_clusters topic
-      leg_tracker::Leg leg = *it;
+      player_tracker::Leg leg = *it;
       detected_leg_clusters.legs.push_back(leg);
       clusters_published_counter++;
 
@@ -303,7 +303,7 @@ private:
   class CompareLegs
   {
   public:
-      bool operator ()(const leg_tracker::Leg &a, const leg_tracker::Leg &b)
+      bool operator ()(const player_tracker::Leg &a, const player_tracker::Leg &b)
       {
           float rel_dist_a = pow(a.position.x*a.position.x + a.position.y*a.position.y, 1./2.);
           float rel_dist_b = pow(b.position.x*b.position.x + b.position.y*b.position.y, 1./2.);          

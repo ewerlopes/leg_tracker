@@ -22,11 +22,91 @@ import copy
 import timeit
 import message_filters
 import sys
+import tf
+import copy
 
 # External modules
 from munkres import Munkres # For the minimum matching assignment problem. To install: https://pypi.python.org/pypi/munkres 
 from pykalman import KalmanFilter # To install: http://pykalman.github.io/#installation
 
+
+class PolarGrid:
+    def __init__(self, n_sections=30, fframe='laser'):
+        self.n_sections = n_sections
+        self.namespace = "polar_occupancy_grid"
+        self.marker_pub = rospy.Publisher('polar_markers', Marker, queue_size=300)
+        self.line_scale = 4
+        self.tf_listener = tf.TransformListener()
+        self.fixed_frame = fframe
+    
+    def euler(self,x):
+        """Euler's formula"""
+        return np.exp(x*1j)
+
+    def getRobotPose(self):
+        """
+        Gets robot global position. That is, performs a TF transformation from /base_link to /map and returns
+        x,y and theta.
+        OUTPUTS:
+        @ a 3D-numpy array defined as: [x, y, theta] w.r.t /map.
+        """
+        try:
+            self.tf_listener.waitForTransform(self.fixed_frame,self.fixed_frame, rospy.Time(0), rospy.Duration(1.0))
+            trans, rot = self.tf_listener.lookupTransform(self.fixed_frame,self.fixed_frame, rospy.Time(0))
+            # transform from quaternion to euler angles
+            euler = tf.transformations.euler_from_quaternion(rot)
+ 
+            return [trans[0], trans[1], euler[2]]   # [xR,yR,theta]
+
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
+            rospy.logerr("Navigation node: " + str(e))
+    
+    def publish_marker(self, time):
+        # publish rviz markers       
+        marker = Marker()
+        marker.header.frame_id = self.fixed_frame
+        marker.header.stamp = time
+        marker.ns = self.namespace
+        marker.type = Marker.LINE_LIST
+        marker.action = marker.ADD
+
+        # marker scale
+        marker.scale.x = 0.03
+        marker.scale.y = 0.03
+        marker.scale.z = 0.03
+
+        # marker color
+        marker.color.a = 1.0
+        marker.color.r = 1.0
+        marker.color.g = 1.0
+        marker.color.b = 0.0
+
+        # marker orientaiton
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+
+        # marker position
+        marker.pose.position.x = 0.0
+        marker.pose.position.y = 0.0
+        marker.pose.position.z = 0.0
+
+        x, y, _ = self.getRobotPose()
+        
+        interval = np.linspace(0,2*np.pi, self.n_sections)
+        sec = [self.euler(i) for i in interval]
+        for s in range(len(sec)):
+            p = Point()
+            p.x = x
+            p.y = y
+            marker.points.append(copy.deepcopy(p))
+            p1 = Point()
+            p1.x = sec[s].real * self.line_scale
+            p1.y = sec[s].imag * self.line_scale
+            marker.points.append(copy.deepcopy(p1))
+
+        self.marker_pub.publish(marker)
 
 
 class DetectedCluster:
@@ -200,6 +280,9 @@ class KalmanMultiTracker:
         # ROS subscribers         
         self.detected_clusters_sub = rospy.Subscriber('detected_leg_clusters', LegArray, self.detected_clusters_callback)      
         self.local_map_sub = rospy.Subscriber('local_map', OccupancyGrid, self.local_map_callback)
+
+        # Polar grid
+        self.polar_grid = PolarGrid()
 
         rospy.spin() # So the node doesn't immediately shut down
                     
@@ -758,6 +841,7 @@ class KalmanMultiTracker:
         # Publish people tracked message
         self.people_tracked_pub.publish(people_tracked_msg)            
 
+        self.polar_grid.publish_marker(now)
 
 if __name__ == '__main__':
     rospy.init_node('multi_person_tracker', anonymous=True)

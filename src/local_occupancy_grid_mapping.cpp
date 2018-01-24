@@ -13,10 +13,10 @@
 #include <message_filters/time_synchronizer.h>
 
 // Custom messages
-#include <leg_tracker/Leg.h>
-#include <leg_tracker/LegArray.h>
+#include <player_tracker/Leg.h>
+#include <player_tracker/LegArray.h>
 
-#include <leg_tracker/laser_processor.h>
+#include <player_tracker/laser_processor.h>
 
 
 /** @todo Make these parameters externally settable */
@@ -100,8 +100,8 @@ private:
 
   ros::NodeHandle nh_;
   message_filters::Subscriber<sensor_msgs::LaserScan> scan_sub_;
-  message_filters::Subscriber<leg_tracker::LegArray> non_leg_clusters_sub_;
-  message_filters::TimeSynchronizer<sensor_msgs::LaserScan, leg_tracker::LegArray> sync;
+  message_filters::Subscriber<player_tracker::LegArray> non_leg_clusters_sub_;
+  message_filters::TimeSynchronizer<sensor_msgs::LaserScan, player_tracker::LegArray> sync;
   ros::Subscriber odom_sub_;
   ros::Subscriber pose_sub_;
   ros::Publisher map_pub_;
@@ -138,7 +138,7 @@ private:
   * 
   * Called whenever both topics have been recently published to
   */
-  void laserAndLegCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg, const leg_tracker::LegArray::ConstPtr& non_leg_clusters)
+  void laserAndLegCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg, const player_tracker::LegArray::ConstPtr& non_leg_clusters)
   {
     // Find out the time that should be used for tfs
     bool transform_available;
@@ -175,7 +175,7 @@ private:
       std::vector<tf::Point> non_legs;    
       for (int i = 0; i < non_leg_clusters->legs.size(); i++) 
       {
-        leg_tracker::Leg leg = non_leg_clusters->legs[i];
+        player_tracker::Leg leg = non_leg_clusters->legs[i];
 
         tf::Point p;
         p[0] = leg.position.x;

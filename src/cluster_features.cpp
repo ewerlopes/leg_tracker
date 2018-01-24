@@ -32,7 +32,7 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *********************************************************************/
 
-#include "leg_tracker/cluster_features.h"
+#include "player_tracker/cluster_features.h"
 
 #include <opencv/cxcore.h>
 #include <opencv/cv.h>

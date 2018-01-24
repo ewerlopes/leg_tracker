@@ -45,8 +45,8 @@
 #include <sensor_msgs/LaserScan.h>
 #include <geometry_msgs/PoseArray.h>
 
-#include <leg_tracker/laser_processor.h>
-#include <leg_tracker/cluster_features.h>
+#include <player_tracker/laser_processor.h>
+#include <player_tracker/cluster_features.h>
 
 
 

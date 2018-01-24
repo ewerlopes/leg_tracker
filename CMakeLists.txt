@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(leg_tracker)
+project(player_tracker)
 
 set(CMAKE_CXX_FLAGS "-std=c++11")
 find_package(Boost REQUIRED system thread)
@@ -45,8 +45,6 @@ include_directories(
 	INCLUDE include
 	${catkin_INCLUDE_DIRS}
 )
-
-
 
 add_executable(
   detect_leg_clusters 
@@ -106,20 +104,13 @@ add_dependencies(train_leg_detector ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(train_leg_detector ${PROJECT_NAME}_gencpp)
 add_dependencies(train_leg_detector ${PROJECT_NAME}_gencfg)
 
-
 install(
   PROGRAMS scripts/joint_leg_tracker.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-
 install(
   PROGRAMS scripts/individual_leg_tracker.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
-
-
-
-
-
 

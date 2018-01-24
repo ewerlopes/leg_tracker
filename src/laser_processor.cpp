@@ -32,7 +32,7 @@
 *  POSSIBILITY OF SUCH DAMAGE.
 *********************************************************************/
 
-#include <leg_tracker/laser_processor.h>
+#include <player_tracker/laser_processor.h>
 
 
 namespace laser_processor

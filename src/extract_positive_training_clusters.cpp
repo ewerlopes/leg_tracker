@@ -10,8 +10,8 @@
 #include <visualization_msgs/MarkerArray.h>
 
 // Custom messages
-#include <leg_tracker/laser_processor.h>
-#include <leg_tracker/cluster_features.h>
+#include <player_tracker/laser_processor.h>
+#include <player_tracker/cluster_features.h>
 
 #include <tf/transform_listener.h>
 #include <tf/message_filter.h>
