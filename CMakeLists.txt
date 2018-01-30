@@ -10,6 +10,17 @@ if(NOT Boost_FOUND)
     message(ERROR " Boost not found!")
 endif(NOT Boost_FOUND)
 
+#########################################################
+# FIND Eigen
+#########################################################
+find_package(Eigen3 REQUIRED eigen3)
+include_directories(${Eigen3_INCLUDE_DIRS})
+link_directories(${Eigen3_LIBRARY_DIRS})
+add_definitions(${Eigen3_DEFINITIONS})
+if(NOT Eigen3_FOUND)
+    message(ERROR "Eigen3 not found!")
+endif(NOT Eigen3_FOUND)
+
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
@@ -74,6 +85,7 @@ add_executable(
   src/extract_positive_training_clusters.cpp
   src/laser_processor.cpp
 )
+
 target_link_libraries(
   extract_positive_training_clusters
   ${catkin_LIBRARIES}
@@ -86,9 +98,22 @@ add_executable(
   src/laser_processor.cpp
   src/cluster_features.cpp  
 )
+
 target_link_libraries(
   train_leg_detector
   ${catkin_LIBRARIES}
+)
+
+add_executable(
+  particle_filter
+  src/particle_filter/ParticleFilter.cpp
+  src/particle_filter/pf_tracker.cpp
+)
+
+target_link_libraries(
+  particle_filter
+  ${catkin_LIBRARIES}
+  ${Eigen3_LIBRARIES}
 )
 
 add_dependencies(local_occupancy_grid_mapping ${PROJECT_NAME}_generate_messages_cpp)
@@ -114,3 +139,7 @@ install(
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
+install(
+  PROGRAMS scripts/leg_distance.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)

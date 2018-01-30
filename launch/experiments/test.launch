@@ -9,8 +9,19 @@
   <!-- run detect_leg_clusters -->  
   <node pkg="player_tracker" type="detect_leg_clusters" name="detect_leg_clusters" output="screen"/>
   
+  <!-- run joint_player_tracker 
+  <node pkg="player_tracker" type="joint_leg_tracker.py" name="joint_leg_tracker" output="screen"-->
+
   <!-- run joint_player_tracker -->
-  <node pkg="player_tracker" type="joint_leg_tracker.py" name="joint_leg_tracker" output="screen"/>
+  <node pkg="player_tracker" type="leg_distance.py" name="leg_distance" output="screen"/>
+
+  <!-- run particle_filter -->
+  <node 
+      pkg="player_tracker" 
+      type="particle_filter" 
+      name="particle_filter" 
+      launch-prefix="xterm -e gdb --args" 
+      output="screen"/>
  
    <!-- run local_occupancy_grid_mapping -->
   <node pkg="player_tracker" type="local_occupancy_grid_mapping" name="local_occupancy_grid_mapping" output="screen"/>

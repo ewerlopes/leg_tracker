@@ -108,7 +108,6 @@ class PolarGrid:
         marker.pose.position.z = 0.0
 
         x, y, _ = self.getRobotPose()
-        rospy.logwarn('--')
         sec = [self.euler(self.FOV_low_endpoint), self.euler(self.FOV_hig_endpoint)*-1]
         for s in range(len(sec)):
             sec[s] += self.euler(np.pi/2)
@@ -122,7 +121,6 @@ class PolarGrid:
             marker.points.append(copy.deepcopy(p1))
 
         self.fov_pub.publish(marker)
-        rospy.logwarn('--')
         
 
     def getRobotPose(self):
@@ -207,8 +205,8 @@ class PolarGrid:
             self.text_pub.publish(m)
 
 
-        for p in people:
-            rospy.logwarn("P. index: {}".format(int(math.atan2(p.point.y,p.point.x)/(2*np.pi/30))))
+        # for p in people:
+        #     rospy.logwarn("P. index: {}".format(int(math.atan2(p.point.y,p.point.x)/(2*np.pi/30))))
         
         self.lines_pub.publish(marker)
         self.publish_fov(time)

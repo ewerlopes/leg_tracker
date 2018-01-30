@@ -1,7 +1,9 @@
 #ifndef PARTICLE_H
 #define PARTICLE_H
 
-#include <ros.h>
+#include <ros/ros.h>
+#include <geometry_msgs/Pose.h>
+#include <geometry_msgs/PoseArray.h>
 #include <eigen3/Eigen/Dense>
 
 
@@ -94,8 +96,10 @@ public:
 
     void drift();
 
-    float distance(Eigen::Vec2f obs) {
-        Eigen::Vec2f pose = state.topRows(2);
+    float distance(Eigen::Matrix<float, 1, 3> &measure) {
+        Eigen::Vector2f pose = state.topRows(2);
+        auto m = measure.transpose();
+        Eigen::Vector2f obs = m.topRows(2);
         return (pose - obs).norm();
     }
 
@@ -112,9 +116,7 @@ public:
     /*
      * Implements standard Kalman filter update equation
      */
-    void update(float x, float y, float theta){
-        Eigen::Matrix<float, 1, 3> Z;
-        Z << x, y, theta;
+    void update(Eigen::Matrix<float, 1, 3> &Z){
         auto Y =  Z.transpose() - (H*state);
         auto S = ((H*P) * H.transpose()) + R;
         auto K = (P * H.transpose()) * S.inverse();
