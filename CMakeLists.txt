@@ -25,6 +25,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  geometry_msgs
   tf
   interactive_markers
   rosbag
@@ -141,5 +142,10 @@ install(
 
 install(
   PROGRAMS scripts/leg_distance.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+install(
+  PROGRAMS scripts/leg_sample_extractor.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
