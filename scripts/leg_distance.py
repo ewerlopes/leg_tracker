@@ -9,7 +9,10 @@ from visualization_msgs.msg import Marker
 from munkres import Munkres, print_matrix # For the minimum matching assignment problem. To install: https://pypi.python.org/pypi/munkres 
 import numpy as np
 
-class LegDistance:    
+class LegDistance: 
+
+    '''Calculates the distance between LEG clusters and saves to file.''' 
+    
     def __init__(self):
 
         self.tf_listener = tf.TransformListener()
@@ -60,7 +63,6 @@ class LegDistance:
             marker.scale.y = cluster.position.y
             marker.scale.z = 0.2                
             marker.pose.position.z = 1.5                        
-            
 
             # Publish to rviz and /people_tracked topic.
             self.marker_pub.publish(marker)

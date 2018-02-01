@@ -79,6 +79,7 @@ public:
             }
         }
 
+
         // Print back params:
         printf("\nROS parameters: \n");
         printf("cluster_dist_euclid:%.2fm \n", cluster_dist_euclid_);
@@ -114,6 +115,7 @@ public:
                 processor.removeLessThan(min_points_per_cluster_);
 
                 geometry_msgs::PoseArray leg_cluster_positions;
+                leg_cluster_positions.header.stamp = scan->header.stamp; //get time
                 leg_cluster_positions.header.frame_id = laser_frame_;
 
                 for (std::list<laser_processor::SampleSet *>::iterator i = processor.getClusters().begin(); 
@@ -121,12 +123,10 @@ public:
                     
                     // Only use scan clusters that are in the specified positive cluster area
                     tf::Point cluster_position = (*i)->getPosition();
-
                     double x_pos = cluster_position[0];
                     double y_pos = cluster_position[1];
                     double angle = atan2(y_pos, x_pos) * 180 / PI;
                     double dist_abs = sqrt(x_pos * x_pos + y_pos * y_pos);
-
                     bool in_bounding_box = use_bounding_box_ and x_pos > x_min_ and x_pos < x_max_ and y_pos > y_min_ and y_pos < y_max_;
                     bool in_arc = !use_bounding_box_ and angle > min_angle_ and angle < max_angle_ and dist_abs < max_dist_;
                     
@@ -140,11 +140,12 @@ public:
           
                 if (!leg_cluster_positions.poses.empty()){ // at least one leg has been found in current scan
                     // Save position of leg to be used later for training
-                    save_bag.write("/leg_cluster_positions", ros::Time::now(),
+                    save_bag.write("/leg_cluster_positions", scan->header.stamp,//ros::Time::now(),
                                   leg_cluster_positions);
 
                     // Save scan
-                    save_bag.write("/training_scan", ros::Time::now(), *scan);
+                    save_bag.write("/training_scan", scan->header.stamp,//ros::Time::now(), 
+                    *scan);
 
                     // Save a marker of the position of the cluster we extracted.
                     // Just used so we can playback the rosbag file
@@ -152,7 +153,7 @@ public:
                     visualization_msgs::MarkerArray ma;
                     for (int i = 0; i < leg_cluster_positions.poses.size(); i++) {
                       visualization_msgs::Marker m;
-                      m.header.frame_id = "laser_frame";
+                      m.header.frame_id = laser_frame_;
                       m.ns = "LEGS";
                       m.id = i;
                       m.type = m.SPHERE;
@@ -168,7 +169,8 @@ public:
                       m.color.r = 1.0;
                       ma.markers.push_back(m);
                     }
-                    save_bag.write("/visualization_marker_array", ros::Time::now(), ma);
+                    save_bag.write("/visualization_marker_array", scan->header.stamp, // ros::Time::now(),
+                     ma);
                 }
             }   
         }
