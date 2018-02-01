@@ -149,13 +149,39 @@ void ParticleFilter::publishParticles() {
 }
 
 void ParticleFilter::peopleDetectedCallback(const player_tracker::PersonArray &msg){
+    
+    auto blocked = blockObservation(msg);
     for (int i = 0; i < msg.people.size(); i++) {
         // TODO add gating here to avoid update everybody!
-        track(msg.people[i].pose);
+        if (!blocked[i]) {
+            track(msg.people[i].pose);
+        }
     }
 }
 
 
 void ParticleFilter::blobDetectedCallback(const geometry_msgs::Pose &pose) {
     track(pose);
+}
+
+/*
+ * Returns true for each person(observation) that must not be considered
+ */
+std::vector<bool> ParticleFilter::blockObservation(const player_tracker::PersonArray &people) const
+{
+    std::vector<bool> blocked(people.people.size());
+    #pragma omp parallel for
+    for (int i = 0; i < people.people.size(); i++) {
+        blocked[i] = true;
+        Vec2f person = Vec2f(people.people[i].pose.position.x, people.people[i].pose.position.y);
+        for (int j = 0; j < particles.size(); j++) {
+            bool inside = particles[j]->isInsideConfidenceInterval(person);     // if person is inside confidence interval of at least a particle then it is possible it is the target
+            if (inside) {
+                blocked[i] = false;
+                break;
+            }
+        }
+    }
+
+    return blocked;
 }

@@ -30,24 +30,31 @@ private:
     ParticleList particles;
     float tao;                                              // temperature parameter used to compute the weights of the particles with kinect observations
 
-    void resample();
-    void propagateParticles();
-    void updateParticles(Eigen::Matrix<float, 1, 3> &Z);                                  // uses Kalman filter update equation
-    void deleteOldParticles();
-    void publishParticles();
-    void initParticles();
-    void initParticles(const geometry_msgs::Pose &pose);
-    void computeWeights(Eigen::Matrix<float, 1, 3> &obs);
-    void computeKinectWeights(Eigen::Matrix<float, 1, 3> &obs);
+protected:
+    virtual void resample();
+    virtual void propagateParticles();
+    virtual void updateParticles(Eigen::Matrix<float, 1, 3> &Z);                                  // uses Kalman filter update equation
+    virtual void deleteOldParticles();
+    virtual void publishParticles();
+    virtual void initParticles();
+    virtual void initParticles(const geometry_msgs::Pose &pose);
+    virtual void computeWeights(Eigen::Matrix<float, 1, 3> &obs);
+    virtual void computeKinectWeights(Eigen::Matrix<float, 1, 3> &obs);
+
+    // new function
+    /*
+     * Returns true for each person(observation) that must not be considered
+     */
+    std::vector<bool> blockObservation(const player_tracker::PersonArray &people) const;
 
 public:
     
     ParticleFilter(int num_particles=1000);
     ~ParticleFilter();
 
-    void peopleDetectedCallback(const player_tracker::PersonArray &people);
-    void blobDetectedCallback(const geometry_msgs::Pose &pose);
-    void track(const geometry_msgs::Pose &pose);
+    virtual void peopleDetectedCallback(const player_tracker::PersonArray &people);
+    virtual void blobDetectedCallback(const geometry_msgs::Pose &pose);
+    virtual void track(const geometry_msgs::Pose &pose);
 };
 
 

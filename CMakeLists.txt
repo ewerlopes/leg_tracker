@@ -107,6 +107,7 @@ target_link_libraries(
 
 add_executable(
   particle_filter
+  src/particle_filter/Particle.cpp
   src/particle_filter/ParticleFilter.cpp
   src/particle_filter/pf_tracker.cpp
 )
