@@ -16,12 +16,7 @@
   <node pkg="player_tracker" type="leg_distance.py" name="leg_distance" output="screen"/-->
 
   <!-- run particle_filter -->
-  <node 
-      pkg="player_tracker" 
-      type="particle_filter" 
-      name="particle_filter" 
-      launch-prefix="xterm -e gdb --args" 
-      output="screen"/>
+  <node pkg="player_tracker" type="particle_filter" name="particle_filter" output="screen"/>
  
    <!-- run local_occupancy_grid_mapping -->
   <node pkg="player_tracker" type="local_occupancy_grid_mapping" name="local_occupancy_grid_mapping" output="screen"/>

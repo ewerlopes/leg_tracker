@@ -8,6 +8,18 @@ float rand_FloatRange(float a, float b){
     return ((b - a) * ((float)rand() / RAND_MAX)) + a;
 }
 
+ParticleFilter::ParticleFilter(int num_particles) : num_particles(num_particles) {
+    particles.resize(num_particles);
+    pub = nh.advertise<geometry_msgs::PoseArray>("/pf_cloud", 10);
+    personDetectedSub = nh.subscribe("/people_tracked", 10, &ParticleFilter::peopleDetectedCallback, this);
+    blobSub = nh.subscribe("/kinect/player_position", 10, &ParticleFilter::blobDetectedCallback, this);
+    initParticles();
+}
+
+ParticleFilter::~ParticleFilter() {
+    deleteOldParticles();
+};
+
 void ParticleFilter::initParticles(const geometry_msgs::Pose &pose){
     #pragma omp parallel for    
     for (int p=0; p < particles.size();p++){
@@ -51,7 +63,7 @@ void ParticleFilter::computeWeights(Eigen::Matrix<float, 1, 3> &obs) {
         summation += particles[i]->getWeight();
     }
 
-    #pragma omp parallel for reduction(+:summation)
+    #pragma omp parallel for
     for (int i = 0; i < particles.size(); i++) {
         particles[i]->normalizeWeight(summation);
     }
@@ -66,48 +78,38 @@ void ParticleFilter::computeKinectWeights(Eigen::Matrix<float, 1, 3> &obs) {
         summation += particles[i]->getWeight();  // denom of Boltzmann weights
     }
 
-    #pragma omp parallel for reduction(+:summation)
+    #pragma omp parallel for
     for (int i = 0; i < particles.size(); i++) {
         particles[i]->normalizeWeight(summation);    // normalization of weights computed with Boltzmann
     }
 }
 
-void ParticleFilter::resample() {   // systematic resampling from https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python/blob/master/12-Particle-Filters.ipynb
-    // N in number of particles
 
-    // make N subdivisions, choose positions 
-    // with a consistent random offset
-    std::vector<float> positions;
-    positions.resize(num_particles);
-    std::vector<float> cumulative_sum;
-    cumulative_sum.resize(num_particles);
-    float prevWeights = 0;
+void ParticleFilter::resample()
+{
+    ParticleList newParticles;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<float> gauss(WHITE_NOISE_MEAN, WHITE_NOISE_STD);
     
-    #pragma omp parallel for
     for (int i = 0; i < particles.size(); i++) {
-        float random = ((float) rand() / (RAND_MAX));
-        positions[i] = (i + random) / num_particles;
-        cumulative_sum[i] = prevWeights + particles[i]->getWeight();
-        prevWeights = cumulative_sum[i];
-    }
-
-    // extracted directly particles to avoid another loop
-    int i = 0;
-    int j = 0;
-    std::vector<Particle*> newParticles;
-    while (i < num_particles) {
-        if (positions[i] < cumulative_sum[j]) {
-            newParticles.push_back(new Particle(particles[j]));
-            i++;
-        } else {
-            j++;
+        int qt = round(((float)particles.size()) * particles[i]->getWeight());
+        for (int j = 0; j < qt; j++) {
+            ParticlePtr perturbated = particles[i]->perturbate(gauss(gen), gauss(gen));
+            newParticles.push_back(perturbated);
+        }
+        if (newParticles.size() >= particles.size()) {
+            break;
         }
     }
-    
+
+    std::cout << "num particles: " << newParticles.size() << std::endl;
     deleteOldParticles();
 
     particles = newParticles;
 }
+
 
 void ParticleFilter::track(const geometry_msgs::Pose &pose) {
     
@@ -119,6 +121,7 @@ void ParticleFilter::track(const geometry_msgs::Pose &pose) {
     computeWeights(obs);
     resample();
     publishParticles();
+    // missing update of velocity and theta!
 }
 
 void ParticleFilter::deleteOldParticles() {

@@ -1,12 +1,19 @@
 #ifndef PARTICLEFILTER_H
 #define PARTICLEFILTER_H
 
+#include <random>
+
+#include <eigen3/Eigen/Dense>
+
 #include <ros/ros.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseArray.h>
-#include <eigen3/Eigen/Dense>
 #include <player_tracker/PersonArray.h>
+
 #include "particle_filter/Particle.h"
+
+#define WHITE_NOISE_MEAN 0.0f
+#define WHITE_NOISE_STD 0.1f
 
 typedef struct{
     float mu;
@@ -20,7 +27,7 @@ private:
     ros::Subscriber personDetectedSub;
     ros::Subscriber blobSub;
     int num_particles;                                      // number of particles
-    std::vector<Particle*> particles;
+    ParticleList particles;
     float tao;                                              // temperature parameter used to compute the weights of the particles with kinect observations
 
     void resample();
@@ -35,18 +42,8 @@ private:
 
 public:
     
-    ParticleFilter(int num_particles=2000){
-        this->num_particles = num_particles;
-        particles.resize(num_particles);
-        pub = nh.advertise<geometry_msgs::PoseArray>("/pf_cloud", 10);
-        personDetectedSub = nh.subscribe("/people_tracked", 10, &ParticleFilter::peopleDetectedCallback, this);
-        blobSub = nh.subscribe("/kinect/player_position", 10, &ParticleFilter::blobDetectedCallback, this);
-        initParticles();
-    }
-
-    ~ParticleFilter(){
-        deleteOldParticles();
-    };
+    ParticleFilter(int num_particles=1000);
+    ~ParticleFilter();
 
     void peopleDetectedCallback(const player_tracker::PersonArray &people);
     void blobDetectedCallback(const geometry_msgs::Pose &pose);
