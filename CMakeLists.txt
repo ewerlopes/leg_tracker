@@ -146,6 +146,6 @@ install(
 )
 
 install(
-  PROGRAMS scripts/leg_sample_extractor.py
+  PROGRAMS scripts/extractor_bounding_box.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

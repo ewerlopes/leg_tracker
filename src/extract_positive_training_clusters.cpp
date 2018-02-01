@@ -144,7 +144,7 @@ public:
                                   leg_cluster_positions);
 
                     // Save scan
-                    save_bag.write("/training_scan", scan->header.stamp,//ros::Time::now(), 
+                    save_bag.write(scan_topic_, scan->header.stamp,//ros::Time::now(), 
                     *scan);
 
                     // Save a marker of the position of the cluster we extracted.
