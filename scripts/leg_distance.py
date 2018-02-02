@@ -269,6 +269,7 @@ class LegDistance:
     
     def __init__(self, x_min, x_max, y_min, y_max, logfile=''):
 
+        # TODO: change this path to be acquire from parameter!
         self.leg_context = LegContextProcessor('/home/airlab/catkin_ws/src/phd_robogame/perception/player_tracker/model/leg_distance-gmm.pkl')
 
         self.tf_listener = tf.TransformListener()
