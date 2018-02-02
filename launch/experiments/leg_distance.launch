@@ -21,11 +21,11 @@
   <!-- run rviz -->
   <node pkg="rviz" type="rviz" name="rviz" />
 
-  <!-- play rosbag -->  
+  <!-- play rosbag normally at rate of 1.0 -->  
   <node pkg="rosbag" type="play" name="player" output="screen" required="true" 
     args="--delay=4
     --clock 
-    --rate=1.0
+    --rate=0.3
     -s 0
     /home/airlab/Documents/bags/leg_tracker/positive_1_extracted.bag"/> <!-- test file: _2018-01-31-16-13-29.bag-->
   <param name="use_sim_time" value="true" />

@@ -335,6 +335,7 @@ class LegDistance:
         now = detected_clusters_msg.header.stamp
        
         accepted_clusters = []
+        appended = 0
 
         for i,cluster in enumerate(detected_clusters_msg.legs):
             in_bounding_box = cluster.position.x > self.x_min_ and \
@@ -343,28 +344,25 @@ class LegDistance:
                               cluster.position.y < self.y_max_
             
             if in_bounding_box:
-                # publish rviz markers       
                 marker = Marker()
                 marker.header.frame_id = self.fixed_frame
                 marker.header.stamp = now
                 marker.id = i
-                marker.ns = "detected_legs"                       
-                marker.type = Marker.SPHERE
-                marker.scale.x = 0.2
-                marker.scale.y = 0.2
-                marker.scale.z = 0.2
-                marker.color.r = 0
-                marker.color.g = 1
-                marker.color.b = 0
-                marker.color.a = 1
+                # Text showing person's ID number 
+                marker.color.r = 1.0
+                marker.color.g = 1.0
+                marker.color.b = 1.0
+                marker.color.a = 1.0
+                marker.type = Marker.TEXT_VIEW_FACING
+                marker.text = str(appended)
+                appended += 1
+                marker.scale.z = 0.2         
                 marker.pose.position.x = cluster.position.x
                 marker.pose.position.y = cluster.position.y        
-                marker.pose.position.z = 0.1                        
+                marker.pose.position.z = 0.5 
                 marker.lifetime = rospy.Duration(0.1)
-
-                # Publish to rviz and /people_tracked topic.
                 self.marker_pub.publish(marker)
-
+                
                 # save cluster
                 accepted_clusters.append(cluster)
         
@@ -376,7 +374,7 @@ class LegDistance:
             out = abs(z.T-z)
             out[np.triu_indices(out.shape[0])] = 500     # 500 is a big weight that replaces inf.
             out_backup = copy.deepcopy(out)
-            #print np.array_str(out, precision=2, suppress_small=True)
+            print np.array_str(out, precision=2, suppress_small=True)
 
             # Run munkres on match_dist to get the lowest cost assignment
             munkres = Munkres()
@@ -389,33 +387,60 @@ class LegDistance:
                 for row, column in indexes[1:N_people_hat+1]:
                     self.f.write(str(out[row][column])+'\n')
                     self.f.flush()
-            else:
-                for row, column in indexes[1:N_people_hat+1]:
 
-                    ### PUBLISHES A RED SPHERE MARKER WITH VARUABLE COLOR (BASED ON DISTANCE PROBABILITY) for each per of leg found ####
-                    for j, m in enumerate([row, column]):
+            N_people_indexes = []
+            
+            for row, column in indexes[1:N_people_hat+1]:
+                ### PUBLISHES A RED SPHERE MARKER WITH VARUABLE COLOR (BASED ON DISTANCE PROBABILITY) for each per of leg found ####
+                for j, m in enumerate([row, column]): 
+                    N_people_indexes.append(m)            
+                    # publish rviz markers 
+                    marker = Marker()
+                    marker.header.frame_id = self.fixed_frame
+                    marker.header.stamp = now
+                    marker.id = j
+                    marker.ns = "person"                       
+                    marker.type = Marker.SPHERE
+                    marker.scale.x = 0.2
+                    marker.scale.y = 0.2
+                    marker.scale.z = 0.2
+                    marker.color.r = self.leg_context.getProbability(out[row][column])
+                    marker.color.g = 0
+                    marker.color.b = 0
+                    marker.color.a = 1
+                    marker.pose.position.x = accepted_clusters[m].position.x
+                    marker.pose.position.y = accepted_clusters[m].position.y        
+                    marker.pose.position.z = 0.1                        
+                    marker.lifetime = rospy.Duration(0.1)
+
+                    # Publish to rviz and /people_tracked topic.
+                    self.marker_pub.publish(marker)
+                    #rospy.logwarn(self.leg_context.getProbability(out[row][column]))
+
+                for i, cluster in enumerate(accepted_clusters):
+                    if i not in N_people_indexes:
                         # publish rviz markers       
                         marker = Marker()
                         marker.header.frame_id = self.fixed_frame
                         marker.header.stamp = now
-                        marker.id = j
+                        marker.id = i+100
                         marker.ns = "detected_legs"                       
-                        marker.type = Marker.SPHERE
+                        marker.type = Marker.CYLINDER
                         marker.scale.x = 0.2
                         marker.scale.y = 0.2
-                        marker.scale.z = 0.2
-                        marker.color.r = self.leg_context.getProbability(out[row][column])
-                        marker.color.g = 0
+                        marker.scale.z = 0.01
+                        marker.color.r = 0
+                        marker.color.g = 1
                         marker.color.b = 0
                         marker.color.a = 1
-                        marker.pose.position.x = accepted_clusters[m].position.x
-                        marker.pose.position.y = accepted_clusters[m].position.y        
-                        marker.pose.position.z = 0.1                        
+                        marker.pose.position.x = cluster.position.x
+                        marker.pose.position.y = cluster.position.y        
+                        marker.pose.position.z = 0.01                        
                         marker.lifetime = rospy.Duration(0.1)
 
                         # Publish to rviz and /people_tracked topic.
                         self.marker_pub.publish(marker)
-                    rospy.logwarn(self.leg_context.getProbability(out[row][column]))
+                
         except IndexError as ex:
             pass
         
