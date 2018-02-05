@@ -149,3 +149,8 @@ install(
   PROGRAMS scripts/extractor_bounding_box.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
+
+install(
+  PROGRAMS scripts/detector.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)

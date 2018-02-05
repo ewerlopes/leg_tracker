@@ -336,7 +336,6 @@ class LegDistance:
         now = detected_clusters_msg.header.stamp
        
         accepted_clusters = []
-        appended = 0
 
         for i,cluster in enumerate(detected_clusters_msg.legs):
             in_bounding_box = True
@@ -356,14 +355,14 @@ class LegDistance:
                 marker.color.b = 1.0
                 marker.color.a = 1.0
                 marker.type = Marker.TEXT_VIEW_FACING
-                marker.text = "{} -- {}".format(str(now),str(appended))
-                appended += 1
-                marker.scale.z = 0.2         
+                marker.text = "t: {}".format(str(now.to_sec()))
+                marker.scale.z = 0.1         
                 marker.pose.position.x = cluster.position.x
                 marker.pose.position.y = cluster.position.y        
                 marker.pose.position.z = 0.5 
                 marker.lifetime = rospy.Duration(0.1)
                 self.marker_pub.publish(marker)
+
                 # publish rviz markers       
                 marker = Marker()
                 marker.header.frame_id = self.fixed_frame
