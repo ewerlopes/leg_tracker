@@ -12,11 +12,11 @@
   <!-- run joint_player_tracker -->
   <node pkg="player_tracker" type="joint_leg_tracker.py" name="joint_leg_tracker" output="screen" />
 
-  <!-- run joint_player_tracker 
-  <node pkg="player_tracker" type="leg_distance.py" name="leg_distance" output="screen"/-->
+  <!-- run joint_player_tracker -->
+  <node pkg="player_tracker" type="leg_distance.py" name="leg_distance" output="screen"/>
 
-  <!-- run particle_filter -->
-  <node pkg="player_tracker" type="particle_filter" name="particle_filter" output="screen"/>
+  <!-- run particle_filter 
+  <node pkg="player_tracker" type="particle_filter" name="particle_filter" output="screen"/-->
  
    <!-- run local_occupancy_grid_mapping -->
   <node pkg="player_tracker" type="local_occupancy_grid_mapping" name="local_occupancy_grid_mapping" output="screen"/>
@@ -30,7 +30,7 @@
     --clock 
     --rate=1.0
     -s 0
-    $(find player_tracker)/rosbags/experiments/_2017-12-12-18-45-06.bag"/>
+    $(find player_tracker)/rosbags/experiments/_2017-12-12-18-48-16.bag"/>
   <param name="use_sim_time" value="true" />
     
 </launch>

@@ -4,6 +4,7 @@ import tf
 import math
 import copy
 import numpy as np
+from scipy import spatial
 
 # Custom messages
 from leg_tracker.msg import Person, PersonArray, Leg, LegArray 
@@ -338,10 +339,11 @@ class LegDistance:
         appended = 0
 
         for i,cluster in enumerate(detected_clusters_msg.legs):
-            in_bounding_box = cluster.position.x > self.x_min_ and \
-                              cluster.position.x < self.x_max_ and \
-                              cluster.position.y > self.y_min_ and \
-                              cluster.position.y < self.y_max_
+            in_bounding_box = True
+            # in_bounding_box = cluster.position.x > self.x_min_ and \
+            #                   cluster.position.x < self.x_max_ and \
+            #                   cluster.position.y > self.y_min_ and \
+            #                   cluster.position.y < self.y_max_
             
             if in_bounding_box:
                 marker = Marker()
@@ -354,7 +356,7 @@ class LegDistance:
                 marker.color.b = 1.0
                 marker.color.a = 1.0
                 marker.type = Marker.TEXT_VIEW_FACING
-                marker.text = str(appended)
+                marker.text = "{} -- {}".format(str(now),str(appended))
                 appended += 1
                 marker.scale.z = 0.2         
                 marker.pose.position.x = cluster.position.x
@@ -362,94 +364,75 @@ class LegDistance:
                 marker.pose.position.z = 0.5 
                 marker.lifetime = rospy.Duration(0.1)
                 self.marker_pub.publish(marker)
+                # publish rviz markers       
+                marker = Marker()
+                marker.header.frame_id = self.fixed_frame
+                marker.header.stamp = now
+                marker.id = i+100
+                marker.ns = "detected_legs"                       
+                marker.type = Marker.CYLINDER
+                marker.scale.x = 0.2
+                marker.scale.y = 0.2
+                marker.scale.z = 0.01
+                marker.color.r = 0
+                marker.color.g = 1
+                marker.color.b = 0
+                marker.color.a = 1
+                marker.pose.position.x = cluster.position.x
+                marker.pose.position.y = cluster.position.y        
+                marker.pose.position.z = 0.01                        
+                marker.lifetime = rospy.Duration(0.1)
+
+                # Publish to rviz and /people_tracked topic.
+                self.marker_pub.publish(marker)
                 
                 # save cluster
                 accepted_clusters.append(cluster)
+        if len(accepted_clusters) <= 1:
+            return
+        #z = np.array([[complex(c.position.x, c.position.y) for c in accepted_clusters]]) # notice the [[ ... ]])
         
-        z = np.array([[complex(c.position.x, c.position.y) for c in accepted_clusters]]) # notice the [[ ... ]]
+        tree = spatial.KDTree(np.array([[c.position.x, c.position.y] for c in accepted_clusters]))
 
-        
-        try: 
-
-            out = abs(z.T-z)
-            out[np.triu_indices(out.shape[0])] = 500     # 500 is a big weight that replaces inf.
-            out_backup = copy.deepcopy(out)
-            print np.array_str(out, precision=2, suppress_small=True)
-
-            # Run munkres on match_dist to get the lowest cost assignment
-            munkres = Munkres()
-            indexes = munkres.compute(out_backup)
-
+        for j, pts in enumerate(tree.data):
+            nearest_point = tree.query(pts, k=2)
+            distance = nearest_point[0][1]
             
-            N_people_hat = int(math.floor(len(accepted_clusters)/2))         # estimated number of people from number of legs inside bounding box.   
-
+            # Save to file
             if self.isSaveToFile:   
-                for row, column in indexes[1:N_people_hat+1]:
-                    self.f.write(str(out[row][column])+'\n')
-                    self.f.flush()
+                self.f.write(str(distance) +'\n')
+                self.f.flush()
 
-            N_people_indexes = []
-            
-            for row, column in indexes[1:N_people_hat+1]:
-                ### PUBLISHES A RED SPHERE MARKER WITH VARUABLE COLOR (BASED ON DISTANCE PROBABILITY) for each per of leg found ####
-                for j, m in enumerate([row, column]): 
-                    N_people_indexes.append(m)            
-                    # publish rviz markers 
-                    marker = Marker()
-                    marker.header.frame_id = self.fixed_frame
-                    marker.header.stamp = now
-                    marker.id = j
-                    marker.ns = "person"                       
-                    marker.type = Marker.SPHERE
-                    marker.scale.x = 0.2
-                    marker.scale.y = 0.2
-                    marker.scale.z = 0.2
-                    marker.color.r = self.leg_context.getProbability(out[row][column])
-                    marker.color.g = 0
-                    marker.color.b = 0
-                    marker.color.a = 1
-                    marker.pose.position.x = accepted_clusters[m].position.x
-                    marker.pose.position.y = accepted_clusters[m].position.y        
-                    marker.pose.position.z = 0.1                        
-                    marker.lifetime = rospy.Duration(0.1)
+            for i, pt in enumerate([pts]):    
+                # publish rviz markers 
+                marker = Marker()
+                marker.header.frame_id = self.fixed_frame
+                marker.header.stamp = now
+                marker.id = j + i * 10
+                marker.ns = "person"                       
+                marker.type = Marker.SPHERE
+                marker.scale.x = 0.2
+                marker.scale.y = 0.2
+                marker.scale.z = 0.2
+                marker.color.r = self.leg_context.getProbability(distance)
+                marker.color.g = 0
+                marker.color.b = 0
+                marker.color.a = 1
+                marker.pose.position.x = pt[0]
+                marker.pose.position.y = pt[1]        
+                marker.pose.position.z = 0.1                        
+                marker.lifetime = rospy.Duration(0.1)
 
-                    # Publish to rviz and /people_tracked topic.
-                    self.marker_pub.publish(marker)
-                    #rospy.logwarn(self.leg_context.getProbability(out[row][column]))
-
-                for i, cluster in enumerate(accepted_clusters):
-                    if i not in N_people_indexes:
-                        # publish rviz markers       
-                        marker = Marker()
-                        marker.header.frame_id = self.fixed_frame
-                        marker.header.stamp = now
-                        marker.id = i+100
-                        marker.ns = "detected_legs"                       
-                        marker.type = Marker.CYLINDER
-                        marker.scale.x = 0.2
-                        marker.scale.y = 0.2
-                        marker.scale.z = 0.01
-                        marker.color.r = 0
-                        marker.color.g = 1
-                        marker.color.b = 0
-                        marker.color.a = 1
-                        marker.pose.position.x = cluster.position.x
-                        marker.pose.position.y = cluster.position.y        
-                        marker.pose.position.z = 0.01                        
-                        marker.lifetime = rospy.Duration(0.1)
-
-                        # Publish to rviz and /people_tracked topic.
-                        self.marker_pub.publish(marker)
-                
-        except IndexError as ex:
-            pass
+                # Publish to rviz and /people_tracked topic.
+                self.marker_pub.publish(marker)
+                #rospy.logwarn(self.leg_context.getProbability(out[row][column]))
         
 
 
 if __name__ == '__main__':
     rospy.init_node('leg_distance_node', anonymous=True)
     rospy.logwarn('THE BOUDING BOX PARAMETERS SHOULD BE THE SAME AS THE ONES IN "extract_positive*.launch" file!')
-    ldistance = LegDistance(x_min=-2.76, x_max=2.47, y_min=-2.37, y_max=1.49)
+    ldistance = LegDistance(x_min=-2.76, x_max=2.47, y_min=-2.37, y_max=1.49)# logfile='/home/airlab/Desktop/newFile.txt')
 
     r = rospy.Rate(10) # 10hz
 
