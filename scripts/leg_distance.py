@@ -7,7 +7,7 @@ import numpy as np
 from scipy import spatial
 
 # Custom messages
-from leg_tracker.msg import Person, PersonArray, Leg, LegArray 
+from player_tracker.msg import Person, PersonArray, Leg, LegArray, PersonEvidence, PersonEvidenceArray
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import PolygonStamped, Point32
 
@@ -239,50 +239,25 @@ class posterior:
         plt.suptitle(supertitle)
         plt.show()
 
-class LegContextProcessor:
-    ''' 
-    Process pairs of leg clusters and weight them by their
+
+class LegContextProcessor: 
+    '''Process pairs of leg clusters and weight them by their
     probability of being a human using a generative model trained
-    by data.
+    by data..''' 
     
-    Additionally, use a beta-bernoulli model for controlling the
-    combinatorial explosion on the number of leg pair evaluations.
-    
-    '''
-    
-    def __init__(self, model_name):
-        self.model = joblib.load(model_name)
-        self.cutoff = prior(1, 1)                # prior with uniform parameters
+    def __init__(self, x_min, x_max, y_min, y_max, pub_bounding_box=False, logfile=''):
 
-    
-    def updateCutoff(self, data):
-        '''Updates the cutoff probability for the getDistance() method'''
-        self.cutoff = posterior(data, self.cutoff)
-    
-    def getProbability(self, distance):
-        '''Evaluate pair distance probability'''
-        logprob = self.model.score_samples(np.array(distance))   # get log-probability
-        return np.exp(logprob)
-
-class LegDistance: 
-
-    '''Calculates the distance between LEG clusters and saves to file.''' 
-    
-    def __init__(self, x_min, x_max, y_min, y_max, logfile=''):
-
-        # TODO: change this path to be acquire from parameter!
-        self.leg_context = LegContextProcessor('/home/airlab/catkin_ws/src/phd_robogame/perception/player_tracker/model/leg_distance-gmm.pkl')
+        self.model = joblib.load(rospy.get_param("leg_dist_model"))
 
         self.tf_listener = tf.TransformListener()
-        self.marker_pub = rospy.Publisher('detected_legs_in_bounding_box', Marker, queue_size=300)
 
+        self.pub_bounding_box = pub_bounding_box
         self.isSaveToFile = logfile != ''
         self.fixed_frame = rospy.get_param('fixed_frame')
 
         if self.isSaveToFile:
             self.f = open(logfile, "w")
         
-
         # accepted area
         self.x_min_ = x_min
         self.x_max_ = x_max
@@ -294,6 +269,8 @@ class LegDistance:
 
         # ROS publishers
         self.pub = rospy.Publisher('bounding_box', PolygonStamped, queue_size=1)
+        self.person_evidence_pub = rospy.Publisher('person_evidence_array', PersonEvidenceArray, queue_size=1)
+        self.marker_pub = rospy.Publisher('detected_legs_in_bounding_box', Marker, queue_size=5)
 
         #rospy.spin() # So the node doesn't immediately shut down
 
@@ -312,10 +289,10 @@ class LegDistance:
         p2.y = self.y_max_
 
         polygon.polygon.points.append(p1)
-        p11 = Point32();
+        p11 = Point32()
         p11.x = p1.x
         p11.y = p1.y + (p2.y - p1.y)
-        p12 = Point32();
+        p12 = Point32()
         p12.x = p1.x + (p2.x - p1.x)
         p12.y = p1.y
         polygon.polygon.points.append(p1)
@@ -326,6 +303,9 @@ class LegDistance:
 
         self.pub.publish(polygon)
 
+    def getPersonProbability(self,distance):
+        '''Uses self.model to calculate the probability of the pair being a person'''
+        return np.exp(self.model.score_samples(distance))
 
     def detected_clusters_callback(self, detected_clusters_msg):    
         """
@@ -338,11 +318,14 @@ class LegDistance:
         accepted_clusters = []
 
         for i,cluster in enumerate(detected_clusters_msg.legs):
+            
             in_bounding_box = True
-            # in_bounding_box = cluster.position.x > self.x_min_ and \
-            #                   cluster.position.x < self.x_max_ and \
-            #                   cluster.position.y > self.y_min_ and \
-            #                   cluster.position.y < self.y_max_
+            
+            if self.pub_bounding_box:
+                in_bounding_box = cluster.position.x > self.x_min_ and \
+                                  cluster.position.x < self.x_max_ and \
+                                  cluster.position.y > self.y_min_ and \
+                                  cluster.position.y < self.y_max_
             
             if in_bounding_box:
                 marker = Marker()
@@ -387,22 +370,32 @@ class LegDistance:
                 
                 # save cluster
                 accepted_clusters.append(cluster)
+
         if len(accepted_clusters) <= 1:
             return
-        #z = np.array([[complex(c.position.x, c.position.y) for c in accepted_clusters]]) # notice the [[ ... ]])
         
         tree = spatial.KDTree(np.array([[c.position.x, c.position.y] for c in accepted_clusters]))
+
+        pair_set = set([])
 
         for j, pts in enumerate(tree.data):
             nearest_point = tree.query(pts, k=2)
             distance = nearest_point[0][1]
+            prob =  self.getPersonProbability(distance)[0]
+
+            pair = list(copy.deepcopy(nearest_point[1]))
+            pair.sort()
+            pair.append(prob) 
+            pair = tuple(pair)
+            pair_set.add(pair)
             
             # Save to file
             if self.isSaveToFile:   
                 self.f.write(str(distance) +'\n')
                 self.f.flush()
 
-            for i, pt in enumerate([pts]):    
+            for i, pt in enumerate([pts]):
+
                 # publish rviz markers 
                 marker = Marker()
                 marker.header.frame_id = self.fixed_frame
@@ -413,7 +406,7 @@ class LegDistance:
                 marker.scale.x = 0.2
                 marker.scale.y = 0.2
                 marker.scale.z = 0.2
-                marker.color.r = self.leg_context.getProbability(distance)
+                marker.color.r = prob
                 marker.color.g = 0
                 marker.color.b = 0
                 marker.color.a = 1
@@ -424,17 +417,32 @@ class LegDistance:
 
                 # Publish to rviz and /people_tracked topic.
                 self.marker_pub.publish(marker)
-                #rospy.logwarn(self.leg_context.getProbability(out[row][column]))
         
+
+        evid_msg = PersonEvidenceArray()
+        evid_msg.header.frame_id = self.fixed_frame
+        evid_msg.header.stamp = now
+
+        for item in pair_set:
+            msg = PersonEvidence()
+            msg.leg1.x = tree.data[item[0]][0]
+            msg.leg1.y = tree.data[item[0]][1]
+            msg.leg2.x = tree.data[item[1]][0]
+            msg.leg2.y = tree.data[item[1]][1]
+            msg.probability = item[2]
+            evid_msg.evidences.append(msg)
+
+        self.person_evidence_pub.publish(evid_msg)
 
 
 if __name__ == '__main__':
     rospy.init_node('leg_distance_node', anonymous=True)
     rospy.logwarn('THE BOUDING BOX PARAMETERS SHOULD BE THE SAME AS THE ONES IN "extract_positive*.launch" file!')
-    ldistance = LegDistance(x_min=-2.76, x_max=2.47, y_min=-2.37, y_max=1.49)# logfile='/home/airlab/Desktop/newFile.txt')
+    ldistance = LegContextProcessor(x_min=-2.76, x_max=2.47, y_min=-2.37, y_max=1.49)# logfile='/home/airlab/Desktop/newFile.txt')
 
     r = rospy.Rate(10) # 10hz
 
     while not rospy.is_shutdown():
-        ldistance.publish()
+        if ldistance.pub_bounding_box:
+            ldistance.publish()
         r.sleep()

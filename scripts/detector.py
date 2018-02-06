@@ -3,7 +3,7 @@
 import rospy
 
 # Custom messages
-from leg_tracker.msg import Person, PersonArray, Leg, LegArray 
+from player_tracker.msg import Person, PersonArray, Leg, LegArray, PersonEvidenceArray
 
 # ROS messages
 from visualization_msgs.msg import Marker
@@ -31,40 +31,44 @@ from munkres import Munkres # For the minimum matching assignment problem. To in
 from pykalman import KalmanFilter # To install: http://pykalman.github.io/#installation
 from auxiliar import KinectEvidence, PolarGrid
 
-class DetectedCluster:
-    """
-    A detected scan cluster. Not yet associated to an existing track.
-    """
+class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+    
+    @staticmethod
+    def euclideanDistance(other):
+        return np.sqrt((other.x - self.x)**2 + (other.y - self.y)**2)
+
+
+class Observation:
+    '''A person evidence. Not yet associated to an existing track.'''
     def __init__(self, pos_x, pos_y, confidence, in_free_space):
-        """
-        Constructor
-        """
-        self.pos_x = pos_x
-        self.pos_y = pos_y
+        self.position = Point(pos_x, pos_y)
         self.confidence = confidence
         self.in_free_space = in_free_space
         self.in_free_space_bool = None
 
-
 class ObjectTracked:
     """
-    A tracked object. Could be a person leg, entire person or any arbitrary object in the laser scan.
+    Used for maintaining object.
     """
-    new_leg_id_num = 1
+    id = 0
 
-    def __init__(self, x, y, now, confidence, is_person, in_free_space): 
-        """
-        Constructor
-        """        
-        self.id_num = ObjectTracked.new_leg_id_num
-        ObjectTracked.new_leg_id_num += 1
+    @staticmethod
+    def getId():
+        '''Return new Id'''
+        ObjectTracked.id +=1
+        return ObjectTracked.id
+
+    def __init__(self, x, y, now, confidence, is_person, in_free_space):  
+        self.id_num = ObjectTracked.getId()
         self.colour = (random.random(), random.random(), random.random())
         self.last_seen = now
         self.seen_in_current_scan = True
         self.times_seen = 1
         self.confidence = confidence
         self.dist_travelled = 0.
-        self.is_person = is_person
         self.deleted = False
         self.in_free_space = in_free_space
 
@@ -83,11 +87,13 @@ class ObjectTracked:
             std_process_noise = 0.03333
         else:
             print "Scan frequency needs to be either 7.5, 10 or 15 or the standard deviation of the process noise needs to be tuned to your scanner frequency"
+        
         std_pos = std_process_noise
         std_vel = std_process_noise
         std_obs = 0.1
         var_pos = std_pos**2
         var_vel = std_vel**2
+        
         # The observation noise is assumed to be different when updating the Kalman filter than when doing data association
         var_obs_local = std_obs**2 
         self.var_obs = (std_obs + 0.4)**2
@@ -106,7 +112,7 @@ class ObjectTracked:
                                       [0, 0,       1,        0],
                                       [0, 0,       0,        1]])
 
-        # Oberservation model. Can observe pos_x and pos_y (unless person is occluded). 
+        # Observation model. Can observe pos_x and pos_y (unless person is occluded). 
         observation_matrix = np.array([[1, 0, 0, 0],
                                        [0, 1, 0, 0]])
 
@@ -149,19 +155,21 @@ class ObjectTracked:
         self.pos_y = self.filtered_state_means[1]
         self.vel_x = self.filtered_state_means[2]
         self.vel_y = self.filtered_state_means[3]
+
+    def getPosition():
+        '''Return the object x,y position from Kalman'''
+        return Point(self.filtered_state_means[0],self.filtered_state_means[1])
     
 
 
-class KalmanTracker:    
+class Tracker:    
     """
     Tracker for tracking all the people and objects
     """
     max_cost = 9999999
 
-    def __init__(self):      
-        """
-        Constructor
-        """
+    def __init__(self):
+        self.player_trak = [] 
         self.objects_tracked = []
         self.potential_leg_pairs = set()
         self.potential_leg_pair_initial_dist_travelled = {}
@@ -183,7 +191,7 @@ class KalmanTracker:
         self.use_scan_header_stamp_for_tfs = rospy.get_param("use_scan_header_stamp_for_tfs", False)
         self.publish_detected_people = rospy.get_param("display_detected_people", False)        
         self.dist_travelled_together_to_initiate_leg_pair = rospy.get_param("dist_travelled_together_to_initiate_leg_pair", 0.5)
-        scan_topic = rospy.get_param("scan_topic", "scan");
+        scan_topic = rospy.get_param("scan_topic", "scan")
         self.scan_frequency = rospy.get_param("scan_frequency", 7.5)
         self.in_free_space_threshold = rospy.get_param("in_free_space_threshold", 0.06)
         self.confidence_percentile = rospy.get_param("confidence_percentile", 0.90)
@@ -200,6 +208,7 @@ class KalmanTracker:
         self.non_leg_clusters_pub = rospy.Publisher('non_leg_clusters', LegArray, queue_size=300)
 
         # ROS subscribers         
+        self.detected_clusters_sub = rospy.Subscriber('person_evidence_array', PersonEvidenceArray, self.evidenceCallback)
         self.detected_clusters_sub = rospy.Subscriber('detected_leg_clusters', LegArray, self.detected_clusters_callback)      
         self.local_map_sub = rospy.Subscriber('local_map', OccupancyGrid, self.local_map_callback)
 
@@ -224,6 +233,7 @@ class KalmanTracker:
         @rtype:     float
         @return:    degree to which the position (x,y) is in freespace (range: 0.-1.)
         """
+        
         # If we haven't got the local map yet, assume nothing's in freespace
         if self.local_map == None:
             return self.in_free_space_threshold*2
@@ -235,7 +245,7 @@ class KalmanTracker:
         # Take the average of the local map's values centred at (map_x, map_y), with a kernel size of <kernel_size>
         # If called repeatedly on the same local_map, this could be sped up with a sum-table
         sum = 0
-        kernel_size = 2;
+        kernel_size = 2
         for i in xrange(map_x-kernel_size, map_x+kernel_size):
             for j in xrange(map_y-kernel_size, map_y+kernel_size):
                 if i + j*self.local_map.info.height < len(self.local_map.data):
@@ -248,50 +258,174 @@ class KalmanTracker:
         return percent
 
         
-    def match_detections_to_tracks_GNN(self, objects_tracked, objects_detected):
+    def match_detections_to_tracks_GNN(self, updated_tracks, observations):
         """
         Match detected objects to existing object tracks using a global nearest neighbour data association
         """
+        
         matched_tracks = {}
 
-        # Populate match_dist matrix of mahalanobis_dist between every detection and every track
-        match_dist = [] # matrix of probability of matching between all people and all detections.   
-        eligable_detections = [] # Only include detections in match_dist matrix if they're in range of at least one track to speed up munkres
-        for detect in objects_detected: 
-            at_least_one_track_in_range = False
-            new_row = []
-            for track in objects_tracked:
-                # Ignore possible matchings between people and detections not in freespace 
-                if track.is_person and not detect.in_free_space_bool:
-                    cost = self.max_cost 
-                else:
-                    # Use mahalanobis dist to do matching
-                    cov = track.filtered_state_covariances[0][0] + track.var_obs # cov_xx == cov_yy == cov
-                    mahalanobis_dist = math.sqrt(((detect.pos_x-track.pos_x)**2 + (detect.pos_y-track.pos_y)**2)/cov) # = scipy.spatial.distance.mahalanobis(u,v,inv_cov)**2
-                    if mahalanobis_dist < self.mahalanobis_dist_gate:
-                        cost = mahalanobis_dist
-                        at_least_one_track_in_range = True
-                    else:
-                        cost = self.max_cost 
-                new_row.append(cost)                    
-            # If the detection is within range of at least one track, add it as an eligable detection in the munkres matching 
-            if at_least_one_track_in_range: 
-                match_dist.append(new_row)
-                eligable_detections.append(detect)
-
-        # Run munkres on match_dist to get the lowest cost assignment
-        if match_dist:
-            munkres = Munkres()
-            # self.pad_matrix(match_dist, pad_value=self.max_cost) # I found no difference when padding it 
-            indexes = munkres.compute(match_dist)
-            for elig_detect_index, track_index in indexes:
-                if match_dist[elig_detect_index][track_index] < self.mahalanobis_dist_gate:
-                    detect = eligable_detections[elig_detect_index]
-                    track = objects_tracked[track_index]
-                    matched_tracks[track] = detect
+        for obs in observations:
+            mdistance = tuple('_',float('inf'))
+            for track in updated_tracks:
+                dist = obs.position.euclideanDistance(track.getPosition())
+                if dist < mdistance[1]:
+                    mdistance = (track, dist)
+            matched_tracks[mdistance[0]] = obs
 
         return matched_tracks
 
+
+    def evidenceCallback(self, evidences):
+
+        now = evidences.header.stamp
+
+        ### define the observations based on their position in free-space ###
+        observations= []
+        for evidence in evidences.evidences:
+            new_observation = Observation((evidence.leg1.x + evidence.leg2.x)/2.,
+                                          (evidence.leg1.y + evidence.leg2.y)/2.,
+                                          evidence.probability,
+                                          in_free_space=self.how_much_in_free_space(evidence))  
+
+            if new_observation.in_free_space < self.in_free_space_threshold:
+                new_observation.in_free_space_bool = True
+            else:
+                new_observation.in_free_space_bool = False
+            observations.append(new_observation)
+        ### ------------------------------------------------------------- ###
+        
+        ### Propogate existing tracks ###
+        updated_tracks = []
+        for propogated_track in self.objects_tracked:
+            propogated_track.update(np.ma.masked_array(np.array([0, 0]), mask=[1,1])) 
+            updated_tracks.append(copy.deepcopy(propogated_track))
+        ### ------------------------- ###
+        
+        # Match detected objects to existing tracks
+        matched_tracks = self.match_detections_to_tracks_GNN(updated_tracks, observations) 
+
+        ### Update all tracks with new observations ###
+        tracks_to_delete = set()   
+        for idx, track in enumerate(self.objects_tracked):
+            propagated_track = updated_tracks[idx]          #  Get the corresponding propogated track
+           
+            xy_observation = np.array([matched_tracks[track].position.x,matched_tracks[track].position.y])
+            track.in_free_space = 0.8*track.in_free_space + 0.2*matched_tracks[track].in_free_space 
+            track.confidence = 0.95*track.confidence + 0.05*matched_tracks[track].confidence                                       
+            track.times_seen += 1
+            track.last_seen = now
+            track.seen_in_current_scan = True
+
+            # TODO: add condition for when observations are not available.
+            #else:
+            # # propogated_track not matched to a detection
+            # # don't provide a measurement update for Kalman filter 
+            # # so send it a masked_array for its observations
+            # observations = np.ma.masked_array(np.array([0, 0]), mask=[1,1]) 
+            # track.seen_in_current_scan = False
+                        
+            # Input observations to Kalman filter
+            track.update(xy_observation)
+
+            # Check track for deletion           
+            if track.confidence < self.confidence_threshold_to_maintain_track:
+                tracks_to_delete.add(track)
+                # rospy.loginfo("deleting due to low confidence")
+            else:
+                # Check track for deletion because covariance is too large
+                cov = track.filtered_state_covariances[0][0] + track.var_obs # cov_xx == cov_yy == cov
+                if cov > self.max_cov:
+                    tracks_to_delete.add(track)
+                    # rospy.loginfo("deleting because unseen for %.2f", (now - track.last_seen).to_sec())
+
+        ###  ---------------------- ###
+
+         # Delete tracks that have been set for deletion
+        for track in tracks_to_delete:         
+            updated_tracks.remove(track)
+            
+        # If detections were not matched, create a new track  
+        for detect in detected_clusters:      
+            if not detect in matched_tracks.values():
+                self.objects_tracked.append(ObjectTracked(detect.pos_x, detect.pos_y, now, detect.confidence, is_person=False, in_free_space=detect.in_free_space))
+
+        # Do some leg pairing to create potential people tracks/leg pairs
+        for track_1 in self.objects_tracked:
+            for track_2 in self.objects_tracked:
+                if (track_1 != track_2 
+                    and track_1.id_num > track_2.id_num 
+                    and (not track_1.is_person or not track_2.is_person) 
+                    and (track_1, track_2) not in self.potential_leg_pairs
+                    ):
+                    self.potential_leg_pairs.add((track_1, track_2))
+                    self.potential_leg_pair_initial_dist_travelled[(track_1, track_2)] = (track_1.dist_travelled, track_2.dist_travelled)
+        
+        # We want to iterate over the potential leg pairs but iterating over the set <self.potential_leg_pairs> will produce arbitrary iteration orders.
+        # This is bad if we want repeatable tests (but otherwise, it shouldn't affect performance).
+        # So we'll create a sorted list and iterate over that.
+        potential_leg_pairs_list = list(self.potential_leg_pairs)
+        potential_leg_pairs_list.sort(key=lambda tup: (tup[0].id_num, tup[1].id_num))
+
+        # Check if current leg pairs are still valid and if they should spawn a person
+        leg_pairs_to_delete = set()   
+        for track_1, track_2 in potential_leg_pairs_list:
+            # Check if we should delete this pair because 
+            # - the legs are too far apart 
+            # - or one of the legs has already been paired 
+            # - or a leg has been deleted because it hasn't been seen for a while
+            dist = ((track_1.pos_x - track_2.pos_x)**2 + (track_1.pos_y - track_2.pos_y)**2)**(1./2.)
+            if (dist > self.max_leg_pairing_dist 
+                or track_1.deleted or track_2.deleted
+                or (track_1.is_person and track_2.is_person) 
+                or track_1.confidence < self.confidence_threshold_to_maintain_track 
+                or track_2.confidence < self.confidence_threshold_to_maintain_track
+                ):
+                leg_pairs_to_delete.add((track_1, track_2))
+                continue
+
+            # Check if we should create a tracked person from this pair
+            # Three conditions must be met:
+            # - both tracks have been matched to a cluster in the current scan
+            # - both tracks have travelled at least a distance of <self.dist_travelled_together_to_initiate_leg_pair> since they were paired
+            # - both tracks are in free-space
+            if track_1.seen_in_current_scan and track_2.seen_in_current_scan:
+                track_1_initial_dist, track_2_initial_dist = self.potential_leg_pair_initial_dist_travelled[(track_1, track_2)]
+                dist_travelled = min(track_1.dist_travelled - track_1_initial_dist, track_2.dist_travelled - track_2_initial_dist)
+                if (dist_travelled > self.dist_travelled_together_to_initiate_leg_pair 
+                    and (track_1.in_free_space < self.in_free_space_threshold or track_2.in_free_space < self.in_free_space_threshold)
+                    ):
+                    if not track_1.is_person  and not track_2.is_person:
+                        # Create a new person from this leg pair
+                        self.objects_tracked.append(
+                            ObjectTracked(
+                                (track_1.pos_x+track_2.pos_x)/2., 
+                                (track_1.pos_y+track_2.pos_y)/2., now, 
+                                (track_1.confidence+track_2.confidence)/2., 
+                                is_person=True, 
+                                in_free_space=0.)
+                            )                
+                        track_1.deleted = True
+                        track_2.deleted = True
+                        self.objects_tracked.remove(track_1)
+                        self.objects_tracked.remove(track_2)
+                    elif track_1.is_person:
+                        # Matched a tracked person to a tracked leg. Just delete the leg and the person will hopefully be matched next iteration
+                        track_2.deleted = True
+                        self.objects_tracked.remove(track_2)
+                    else: # track_2.is_person:
+                        # Matched a tracked person to a tracked leg. Just delete the leg and the person will hopefully be matched next iteration
+                        track_1.deleted = True
+                        self.objects_tracked.remove(track_1)
+                    leg_pairs_to_delete.add((track_1, track_2))
+
+        # Delete leg pairs set for deletion
+        for leg_pair in leg_pairs_to_delete:
+            self.potential_leg_pairs.remove(leg_pair)
+
+        # Publish to rviz and /people_tracked topic.
+        self.publish_tracked_objects(now)
+        self.publish_tracked_people(now)
       
     def detected_clusters_callback(self, detected_clusters_msg):    
         """
@@ -770,7 +904,7 @@ class KalmanTracker:
 
 if __name__ == '__main__':
     rospy.init_node('player_tracker', anonymous=True)
-    kmt = KalmanTracker()
+    t = Tracker()
 
 
 

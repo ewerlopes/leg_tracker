@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(player_tracker)
 
-set(CMAKE_CXX_FLAGS "-std=c++11")
+set(CMAKE_CXX_FLAGS "-std=c++11 -g")
 find_package(Boost REQUIRED system thread)
 include_directories(${Boost_INCLUDE_DIRS})
 link_directories(${Boost_LIBRARY_DIRS})
@@ -9,6 +9,12 @@ add_definitions(${Boost_DEFINITIONS})
 if(NOT Boost_FOUND)
     message(ERROR " Boost not found!")
 endif(NOT Boost_FOUND)
+
+
+find_package(OpenCV REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS})
+link_directories(${OpenCV_LIBRARY_DIRS})
+add_definitions(${OpenCV_DEFINITIONS})
 
 #########################################################
 # FIND Eigen
@@ -39,6 +45,8 @@ add_message_files(
   PersonArray.msg
   Leg.msg
   LegArray.msg
+  PersonEvidence.msg
+  PersonEvidenceArray.msg
 )
 
 generate_messages(   
@@ -67,6 +75,7 @@ add_executable(
 target_link_libraries(
   detect_leg_clusters 
   ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}
 )
 
 
@@ -97,12 +106,13 @@ add_executable(
   train_leg_detector
   src/train_leg_detector.cpp
   src/laser_processor.cpp
-  src/cluster_features.cpp  
+  src/cluster_features.cpp 
 )
 
 target_link_libraries(
   train_leg_detector
   ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}
 )
 
 add_executable(
