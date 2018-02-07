@@ -10,8 +10,8 @@
   <!-- run detect_leg_clusters -->  
   <node pkg="player_tracker" type="detect_leg_clusters" name="detect_leg_clusters" output="screen"/>
   
-  <!-- run joint_player_tracker -->
-  <node pkg="player_tracker" type="joint_leg_tracker.py" name="joint_leg_tracker" output="screen" />
+  <!-- run joint_player_tracker 
+  <node pkg="player_tracker" type="joint_leg_tracker.py" name="joint_leg_tracker" output="screen" /> -->
 
   <!-- run joint_player_tracker -->
   <node pkg="player_tracker" type="leg_distance.py" name="leg_distance" output="screen"/> 
