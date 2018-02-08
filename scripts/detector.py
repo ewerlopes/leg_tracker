@@ -228,7 +228,7 @@ class Tracker:
         self.scan_frequency = rospy.get_param("scan_frequency", 7.5)
         self.in_free_space_threshold = rospy.get_param("in_free_space_threshold", 0.06)
         self.confidence_percentile = rospy.get_param("confidence_percentile", 0.90)
-        self.max_std = rospy.get_param("max_std", 0.9)
+        self.max_std = rospy.get_param("max_std", 1)
 
         self.mahalanobis_dist_gate = scipy.stats.norm.ppf(1.0 - (1.0-self.confidence_percentile)/2., 0, 1.0)
         self.max_cov = self.max_std**2
@@ -349,7 +349,6 @@ class Tracker:
         if len(self.objects_tracked) == 0:
             for evidence in evidences.evidences:
                 p = Position((evidence.leg1.x + evidence.leg2.x)/2.,(evidence.leg1.y + evidence.leg2.y)/2.)
-                blob_confidence = p.euclideanDistance(self.getPlayerKinectPosition())
                 new_observation = ObjectTracked((evidence.leg1.x + evidence.leg2.x)/2., 
                                                 (evidence.leg1.y + evidence.leg2.y)/2., 
                                                 now, 
@@ -362,13 +361,13 @@ class Tracker:
             if self.player_position is None:
                 new_observation = ObjectTracked(blob_pos.x,blob_pos.y,
                                             now,
-                                            0.6,
+                                            1,
                                             False,
                                             in_free_space=self.how_much_in_free_space(blob_pos))
             else:
                 new_observation = ObjectTracked(blob_pos.x,blob_pos.y,
                                             now,
-                                            self.RBFKernel(blob_pos, self.player_position.getPosition(), self.lda_player),
+                                            self.calcNewConfidence(blob_pos),
                                             False,
                                             in_free_space=self.how_much_in_free_space(blob_pos))  
             self.objects_tracked.append(new_observation)
@@ -387,17 +386,6 @@ class Tracker:
                 else:
                     new_observation.in_free_space_bool = False
                 observations.append(new_observation)
-            
-            # blob_pos = self.getPlayerKinectPosition()           ## add blob position as evidence as well.
-            # if self.player_position is None:
-            #     new_observation = Observation(blob_pos.x,blob_pos.y,
-            #                                  0.6,
-            #                                 in_free_space=self.how_much_in_free_space(blob_pos))
-            # else:
-            #     new_observation = Observation(blob_pos.x, blob_pos.y,
-            #                                  self.RBFKernel(blob_pos, self.player_position.getPosition(), self.lda_player),
-            #                                  in_free_space=self.how_much_in_free_space(blob_pos))  
-            # observations.append(new_observation)         
 
 
             ### ------------------------------------------------------------- ###
@@ -431,8 +419,7 @@ class Tracker:
                     xy_observation = np.array([matched_tracks[track].position.x,matched_tracks[track].position.y])
                     track.kf.observation_covariance = np.exp(-matched_tracks[track].confidence) * np.eye(2)
                     track.in_free_space = 0.8*track.in_free_space + 0.2*matched_tracks[track].in_free_space 
-                    # track.confidence = 0.9*track.confidence + 0.1*matched_tracks[track].confidence
-                    track.confidence = 0.5*track.confidence + 0.5*self.calcNewConfidence(track.getPosition())
+                    track.confidence = 0.8*track.confidence + 0.2*self.calcNewConfidence(track.getPosition())
                     track.times_seen += 1
                     track.last_seen = now
                     track.isPlayer = False
@@ -460,8 +447,6 @@ class Tracker:
                 self.objects_tracked.remove(track)
             
             for ev in observations:
-                blob_distance = ev.position.euclideanDistance(self.getPlayerKinectPosition())
-                
                 if ev not in matched_tracks.values() and ev.confidence > 0.5: ## because the evidence may been too far away...
                     self.objects_tracked.append(ObjectTracked((ev.position.x + ev.position.x)/2., (ev.position.y + ev.position.y)/2., 
                                                                 now, self.calcNewConfidence(ev.position), False,
@@ -530,11 +515,15 @@ class Tracker:
                     player_idx = new_object_tracks.index(new)
         
         if player_idx is not None:
-            new_object_tracks[player_idx].setIsPerson(True)
-            self.player_position = copy.deepcopy(new_object_tracks[player_idx])
+            if  self.player_position is None:
+                new_object_tracks[player_idx].setIsPerson(True)
+                self.player_position = copy.deepcopy(new_object_tracks[player_idx])
+            else:
+                if new_object_tracks[player_idx].getPosition().euclideanDistance(self.player_position.getPosition()) < 1: # TODO -< gambiarra
+                    new_object_tracks[player_idx].setIsPerson(True)
+                    self.player_position = copy.deepcopy(new_object_tracks[player_idx])
 
         self.objects_tracked = new_object_tracks
-        rospy.logwarn(self.player_position.getPosition())
 
         # Publish to rviz and /people_tracked topic.
         self.publish_tracked_people(now)
