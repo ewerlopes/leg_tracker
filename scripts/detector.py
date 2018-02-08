@@ -57,6 +57,9 @@ class Position(object):
     def __add__(self, other):
         return Position(self.x + other.x, self.y + other.y)
 
+    def to_list(self):
+        return [self.x,self.y]
+
 class Observation(object):
     '''A person evidence. Not yet associated to an existing track.'''
     def __init__(self, pos_x, pos_y, confidence, in_free_space):
@@ -77,11 +80,13 @@ class ObjectTracked:
         ObjectTracked.id +=1
         return ObjectTracked.id
 
-    def __init__(self, x, y, now, confidence, is_person, in_free_space):  
+    def __init__(self, x, y, now, confidence, is_player, in_free_space):  
         self.id_num = "Hyp: {}".format(ObjectTracked.getId())
-        self.colour = (random.random(), random.random(), random.random())
+        self.colour = (0,0,0)
+        self.setIsPerson(is_player)
         self.last_seen = now
         self.seen_in_current_scan = True
+        self.isPlayer = is_player
         self.times_seen = 1
         self.confidence = confidence
         self.dist_travelled = 0.
@@ -175,6 +180,13 @@ class ObjectTracked:
     def getPosition(self):
         '''Return the object x,y position from Kalman'''
         return Position(self.pos_x,self.pos_y)
+
+    def setIsPerson(self, is_person):
+        if is_person:
+            self.colour = (0.9,0.05,0.05)
+        else:
+            self.colour = (0.2,0.2,0.2)
+
     
 
 
@@ -182,7 +194,7 @@ class Tracker:
     """
     Tracker for tracking all the people and objects
     """
-    max_cost = 9999999
+    max_cost = float('inf')
 
     def __init__(self):
         self.player_trak = [] 
@@ -196,12 +208,17 @@ class Tracker:
         self.listener = tf.TransformListener()
         self.local_map = None
         self.new_local_map_received = True
+
+        self.lda_blob = 0.5
+        self.lda_player = 0.5
+        self.player_position = None
+
         random.seed(1) 
 
         # Get ROS params
         self.fixed_frame = rospy.get_param("fixed_frame", "odom")
         self.max_leg_pairing_dist = rospy.get_param("max_leg_pairing_dist", 0.8)
-        self.confidence_threshold_to_maintain_track = rospy.get_param("confidence_threshold_to_maintain_track", 0.1)
+        self.confidence_threshold_to_maintain_track = rospy.get_param("confidence_threshold_to_maintain_track", 0.5)
         self.publish_occluded = rospy.get_param("publish_occluded", True)
         self.publish_people_frame = rospy.get_param("publish_people_frame", self.fixed_frame)
         self.use_scan_header_stamp_for_tfs = rospy.get_param("use_scan_header_stamp_for_tfs", False)
@@ -229,7 +246,7 @@ class Tracker:
         self.local_map_sub = rospy.Subscriber('local_map', OccupancyGrid, self.local_map_callback)
 
         # Polar grid
-        #self.polar_grid = PolarGrid()
+        self.polar_grid = PolarGrid()
 
         self.tf_listener = tf.TransformListener()
 
@@ -258,6 +275,9 @@ class Tracker:
         if isinstance(evidence, Observation):
             x = evidence.position.x
             y = evidence.position.y
+        elif isinstance(evidence, Position):
+            x = evidence.x
+            y = evidence.y
         else:
             x = (evidence.leg1.x + evidence.leg2.x)/2.
             y = (evidence.leg1.y + evidence.leg2.y)/2.
@@ -285,12 +305,12 @@ class Tracker:
         percent = sum/(((2.*kernel_size + 1)**2.)*100.)
         return percent
 
-    def getPlayerKinectPose(self):
+    def getPlayerKinectPosition(self):
         """
         Gets the player blob position.
         """
         try:
-            self.tf_listener.waitForTransform('/player_filtered_link','/base_link', rospy.Time(0), rospy.Duration(1.0))
+            self.tf_listener.waitForTransform('/player_filtered_link','/base_link', rospy.Time(0), rospy.Duration(0.1))
             trans, rot = self.tf_listener.lookupTransform('/player_filtered_link','/base_link', rospy.Time(0))
  
             return Position(trans[0], trans[1])
@@ -307,17 +327,17 @@ class Tracker:
         matched_tracks = {}
         blob_distances = {}
 
-        blob_position = self.getPlayerKinectPose()
+        blob_position = self.getPlayerKinectPosition()
 
         for track in updated_tracks:
             o = '_'
             mdistance = float('inf')
             for obs in observations:   
                 dist = obs.position.euclideanDistance(track.getPosition())
-                if dist < mdistance:
+                if (dist < mdistance) and obs.confidence > 0.5:
                     mdistance = dist
                     o = obs
-            matched_tracks[track] = o if mdistance < 1 else None
+            matched_tracks[track] = o if mdistance < 1.5 else None
             blob_distances[track] = obs.position.euclideanDistance(blob_position)
 
         return matched_tracks, blob_distances
@@ -329,30 +349,57 @@ class Tracker:
         if len(self.objects_tracked) == 0:
             for evidence in evidences.evidences:
                 p = Position((evidence.leg1.x + evidence.leg2.x)/2.,(evidence.leg1.y + evidence.leg2.y)/2.)
-                blob_confidence = p.euclideanDistance(self.getPlayerKinectPose())
+                blob_confidence = p.euclideanDistance(self.getPlayerKinectPosition())
                 new_observation = ObjectTracked((evidence.leg1.x + evidence.leg2.x)/2., 
                                                 (evidence.leg1.y + evidence.leg2.y)/2., 
                                                 now, 
-                                                0.5*evidence.probability + 0.5*np.exp(-5*blob_confidence),
-                                                True, 
+                                                evidence.probability + self.RBFKernel(p,self.getPlayerKinectPosition(),self.lda_blob),
+                                                False, 
                                                 in_free_space=self.how_much_in_free_space(evidence))
-
                 self.objects_tracked.append(new_observation)
+
+            blob_pos = self.getPlayerKinectPosition()                ## add blob position as evidence as well.
+            if self.player_position is None:
+                new_observation = ObjectTracked(blob_pos.x,blob_pos.y,
+                                            now,
+                                            0.6,
+                                            False,
+                                            in_free_space=self.how_much_in_free_space(blob_pos))
+            else:
+                new_observation = ObjectTracked(blob_pos.x,blob_pos.y,
+                                            now,
+                                            self.RBFKernel(blob_pos, self.player_position.getPosition(), self.lda_player),
+                                            False,
+                                            in_free_space=self.how_much_in_free_space(blob_pos))  
+            self.objects_tracked.append(new_observation)
             return
         else:
             ### define the observations based on their position in free-space ###
             observations= []
             for evidence in evidences.evidences:
                 new_observation = Observation((evidence.leg1.x + evidence.leg2.x)/2.,
-                                            (evidence.leg1.y + evidence.leg2.y)/2.,
-                                            evidence.probability,
-                                            in_free_space=self.how_much_in_free_space(evidence))  
+                                              (evidence.leg1.y + evidence.leg2.y)/2.,
+                                              evidence.probability,
+                                              in_free_space=self.how_much_in_free_space(evidence))  
 
                 if new_observation.in_free_space < self.in_free_space_threshold:
                     new_observation.in_free_space_bool = True
                 else:
                     new_observation.in_free_space_bool = False
                 observations.append(new_observation)
+            
+            # blob_pos = self.getPlayerKinectPosition()           ## add blob position as evidence as well.
+            # if self.player_position is None:
+            #     new_observation = Observation(blob_pos.x,blob_pos.y,
+            #                                  0.6,
+            #                                 in_free_space=self.how_much_in_free_space(blob_pos))
+            # else:
+            #     new_observation = Observation(blob_pos.x, blob_pos.y,
+            #                                  self.RBFKernel(blob_pos, self.player_position.getPosition(), self.lda_player),
+            #                                  in_free_space=self.how_much_in_free_space(blob_pos))  
+            # observations.append(new_observation)         
+
+
             ### ------------------------------------------------------------- ###
 
             ### Propogate existing tracks ###
@@ -375,19 +422,20 @@ class Tracker:
                     # don't provide a measurement update for Kalman filter 
                     # so send it a masked_array for its observations
                     obs = np.ma.masked_array(np.array([0, 0]), mask=[1,1]) 
-                    track.kf.observation_covariance = np.eye(2)
+                    #track.kf.observation_covariance = np.eye(2)
                     track.seen_in_current_scan = False
                     # Input observations to Kalman filter
                     track.update(obs)
                 
-                #rospy.logwarn('#Tracks: {}\t Indx: {} \t match_len{}'.format(len(self.objects_tracked), idx, len(matched_tracks)))
                 else:
                     xy_observation = np.array([matched_tracks[track].position.x,matched_tracks[track].position.y])
-                    track.kf.observation_covariance = (np.exp(-matched_tracks[track].confidence) + np.exp(-5*blob_distances[track])) * np.eye(2)
+                    track.kf.observation_covariance = np.exp(-matched_tracks[track].confidence) * np.eye(2)
                     track.in_free_space = 0.8*track.in_free_space + 0.2*matched_tracks[track].in_free_space 
-                    track.confidence = 0.95*track.confidence + 0.05*(matched_tracks[track].confidence + np.exp(-5*blob_distances[track]))
+                    # track.confidence = 0.9*track.confidence + 0.1*matched_tracks[track].confidence
+                    track.confidence = 0.5*track.confidence + 0.5*self.calcNewConfidence(track.getPosition())
                     track.times_seen += 1
                     track.last_seen = now
+                    track.isPlayer = False
                     track.seen_in_current_scan = True
                                 
                     # Input observations to Kalman filter
@@ -402,7 +450,8 @@ class Tracker:
                     cov = track.filtered_state_covariances[0][0] + track.var_obs # cov_xx == cov_yy == cov
                     if cov > self.max_cov:
                         tracks_to_delete.add(track)
-                        rospy.loginfo("deleting because unseen for %.2f", (now - track.last_seen).to_sec())
+                        rospy.loginfo("deleting track due to large covariance...")
+                        #rospy.loginfo("deleting because unseen for %.2f", (now - track.last_seen).to_sec())
 
             ###  ---------------------- ###
 
@@ -411,22 +460,20 @@ class Tracker:
                 self.objects_tracked.remove(track)
             
             for ev in observations:
-                blob_confidence = ev.position.euclideanDistance(self.getPlayerKinectPose())
-                if ev not in matched_tracks.values() and np.log(ev.confidence) > 1: ## because the evidence may been too far away...
-                    self.objects_tracked.append(ObjectTracked((ev.position.x + ev.position.x)/2., 
-                                                (ev.position.y + ev.position.y)/2., 
-                                                now, 
-                                                0.5*ev.confidence + 0.5*np.exp(-5*blob_confidence),
-                                                True, 
-                                                in_free_space=self.how_much_in_free_space(ev)))
+                blob_distance = ev.position.euclideanDistance(self.getPlayerKinectPosition())
+                
+                if ev not in matched_tracks.values() and ev.confidence > 0.5: ## because the evidence may been too far away...
+                    self.objects_tracked.append(ObjectTracked((ev.position.x + ev.position.x)/2., (ev.position.y + ev.position.y)/2., 
+                                                                now, self.calcNewConfidence(ev.position), False,
+                                                                in_free_space=self.how_much_in_free_space(ev)))
 
         
-        if len(self.objects_tracked) <= 1:
+        if len(self.objects_tracked) == 0:
             return
 
         #### Unite similar tracks that are smaller than epsilon ####
         tree = spatial.KDTree(np.array([[p.x, p.y] for p in [o.getPosition() for o in self.objects_tracked]]))
-        epsilon = 1
+        epsilon = 0.5
 
         struct = {}
         for n in range(len(tree.data)):
@@ -454,6 +501,10 @@ class Tracker:
         
         new_object_tracks = []
 
+        player_idx = None
+        max_player_confidence = float('-inf')
+        new = None
+
         # update tracks
         for key in struct.keys():
             pts = []
@@ -466,36 +517,47 @@ class Tracker:
             if len(pts) == 1:
                 new = copy.deepcopy(self.objects_tracked[pts[0]])
             else:
-                mean_pos = Position(0,0)
-                confidence = 0
-                in_free_space = 0
-                vel_x = 0
-                vel_y = 0
-                times_seen = 0
-                dist_travelled = 0
+                max_confidence = float('-inf')
+
                 for p in pts:
-                    mean_pos += self.objects_tracked[p].getPosition()
-                    confidence += self.objects_tracked[p].confidence
-                    in_free_space += self.objects_tracked[p].in_free_space
-                    vel_x += self.objects_tracked[p].vel_x
-                    vel_y += self.objects_tracked[p].vel_y
-                    times_seen += self.objects_tracked[p].times_seen
-                    dist_travelled += self.objects_tracked[p].dist_travelled
-
-                obj_track = ObjectTracked(mean_pos.x/len(pts), mean_pos.y/len(pts), now, confidence/len(pts), True, in_free_space/len(pts))
-                obj_track.vel_x = vel_x/len(pts)
-                obj_track.vel_y = vel_y/len(pts)
-                obj_track.times_seen = times_seen / len(pts) 
-                obj_track.dist_travelled = dist_travelled / len(pts)
-
-                new = obj_track
+                    if self.objects_tracked[p].confidence > max_confidence:
+                        new = copy.deepcopy(self.objects_tracked[p])
 
             new_object_tracks.append(new)
+            
+            if new.confidence > max_player_confidence:
+                    max_player_confidence = new.confidence
+                    player_idx = new_object_tracks.index(new)
+        
+        if player_idx is not None:
+            new_object_tracks[player_idx].setIsPerson(True)
+            self.player_position = copy.deepcopy(new_object_tracks[player_idx])
+
         self.objects_tracked = new_object_tracks
+        rospy.logwarn(self.player_position.getPosition())
 
         # Publish to rviz and /people_tracked topic.
-        # self.publish_tracked_objects(now)
         self.publish_tracked_people(now)
+
+
+    def calcNewConfidence(self, position):
+        p_wrt_blob = self.RBFKernel(position,self.getPlayerKinectPosition(), self.lda_blob)
+        p_wrt_current_player = None
+        if self.player_position is None:
+            p_wrt_current_player = self.RBFKernel(position,Position(0.0,0.0), self.lda_player)
+        else:
+            p_wrt_current_player = self.RBFKernel(position,self.player_position.getPosition(), self.lda_player)
+        return p_wrt_blob + p_wrt_current_player - p_wrt_blob * p_wrt_current_player
+
+
+    def RBFKernel(self,x,b,lda):
+        if isinstance(x, Position) or isinstance(b,Position):
+            x = np.array(x.to_list())
+            b = np.array(b.to_list())
+        else:
+            raise Exception('x and b must be Position instances')
+        return np.exp(-lda*np.dot(np.transpose(np.array(x)-np.array(b)),(np.array(x)-np.array(b))))
+
 
     def publish_tracked_people(self, now):
         """
@@ -559,7 +621,7 @@ class Tracker:
                     marker.ns = "People_tracked"
                     marker.color.r = person.colour[0]
                     marker.color.g = person.colour[1]
-                    marker.color.b = person.colour[2]          
+                    marker.color.b = person.colour[2]        
                     marker.color.a = (rospy.Duration(3) - (rospy.get_rostime() - person.last_seen)).to_sec()/rospy.Duration(3).to_sec() + 0.1
                     marker.pose.position.x = ps.point.x 
                     marker.pose.position.y = ps.point.y
@@ -590,7 +652,7 @@ class Tracker:
                     marker.id = marker_id
                     marker_id += 1
                     marker.type = Marker.TEXT_VIEW_FACING
-                    marker.text = str(person.id_num)
+                    marker.text = "C: {:.2f}".format(person.confidence) #str(person.id_num)
                     marker.scale.z = 0.2         
                     marker.pose.position.z = 1.7
                     self.marker_pub.publish(marker)
@@ -652,7 +714,9 @@ class Tracker:
         self.prev_person_marker_id = marker_id          
 
         # Publish people tracked message
-        self.people_tracked_pub.publish(people_tracked_msg)            
+        self.people_tracked_pub.publish(people_tracked_msg)   
+
+        self.polar_grid.publish_fov(now)         
 
 if __name__ == '__main__':
     rospy.init_node('player_tracker', anonymous=True)

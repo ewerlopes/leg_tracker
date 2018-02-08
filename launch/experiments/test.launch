@@ -34,7 +34,7 @@
     --clock 
     --rate=1.0
     -s 0
-    $(find player_tracker)/rosbags/experiments/_2017-12-12-18-48-16.bag"/>
+    $(find player_tracker)/rosbags/experiments/_2017-12-12-18-45-06.bag"/>
   <param name="use_sim_time" value="true" />
     
 </launch>
