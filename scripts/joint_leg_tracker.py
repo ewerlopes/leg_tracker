@@ -3,7 +3,7 @@
 import rospy
 
 # Custom messages
-from leg_tracker.msg import Person, PersonArray, Leg, LegArray 
+from player_tracker.msg import Person, PersonArray, Leg, LegArray 
 
 # ROS messages
 from visualization_msgs.msg import Marker

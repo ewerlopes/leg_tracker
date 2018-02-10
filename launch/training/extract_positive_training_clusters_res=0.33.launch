@@ -15,10 +15,10 @@ To check that you've selected the right clusters, play back the generated bagfil
     <param name="save_bag_file" value="/home/airlab/Documents/bags/leg_tracker/positive_1_extracted.bag"/>
     <param name="scan_topic" value="/scan"/>
     <param name="laser_frame" value="/base_link"/>
-    <param name="x_min" value="-2.62"/> 
-    <param name="x_max" value="2.39"/> 
-    <param name="y_min" value="-2.27"/>
-    <param name="y_max" value="0.89"/> 
+    <param name="x_min" value="-2.76"/> 
+    <param name="x_max" value="2.47"/> 
+    <param name="y_min" value="-2.37"/>
+    <param name="y_max" value="1.49"/> 
   </node>
 
 </launch>
