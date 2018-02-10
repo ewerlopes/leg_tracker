@@ -11,9 +11,18 @@ float rand_FloatRange(float a, float b){
 ParticleFilter::ParticleFilter(int num_particles) : num_particles(num_particles) {
     particles.resize(num_particles);
     pub = nh.advertise<geometry_msgs::PoseArray>("/pf_cloud", 10);
-    personDetectedSub = nh.subscribe("/people_tracked", 10, &ParticleFilter::peopleDetectedCallback, this);
-    blobSub = nh.subscribe("/kinect/player_position", 10, &ParticleFilter::blobDetectedCallback, this);
+    // personDetectedSub = nh.subscribe("/people_tracked", 10, &ParticleFilter::peopleDetectedCallback, this);
+    // blobSub = nh.subscribe("/kinect/player_position", 10, &ParticleFilter::blobDetectedCallback, this);
     initParticles();
+}
+
+ParticleFilter::ParticleFilter(const ParticleFilter &that)
+{
+    this->num_particles = that.num_particles;
+    this->tao = that.tao;
+    deepCopy(that.particles);
+
+    pub = nh.advertise<geometry_msgs::PoseArray>("/pf_cloud", 10);
 }
 
 ParticleFilter::~ParticleFilter() {
@@ -47,14 +56,21 @@ void ParticleFilter::propagateParticles() {
     }
 }
 
-void ParticleFilter::updateParticles(Eigen::Matrix<float, 1, 3> &Z) {
+void ParticleFilter::updateParticles(Eigen::Matrix<float, 3, 1> &Z) {
     #pragma omp parallel for
     for (int i = 0; i < particles.size(); i++) {
         particles[i]->update(Z);
     }
 }
 
-void ParticleFilter::computeWeights(Eigen::Matrix<float, 1, 3> &obs) {
+void ParticleFilter::updateParticles(Eigen::Matrix<float, 2, 1> &Z) {
+    #pragma omp parallel for
+    for (int i = 0; i < particles.size(); i++) {
+        particles[i]->update(Z);
+    }
+}
+
+void ParticleFilter::computeWeights(Eigen::Matrix<float, 2, 1> &obs) {
     float summation = 0.0f;
 
     #pragma omp parallel for reduction(+:summation)
@@ -69,7 +85,22 @@ void ParticleFilter::computeWeights(Eigen::Matrix<float, 1, 3> &obs) {
     }
 }
 
-void ParticleFilter::computeKinectWeights(Eigen::Matrix<float, 1, 3> &obs) {
+void ParticleFilter::computeWeights(Eigen::Matrix<float, 3, 1> &obs) {
+    float summation = 0.0f;
+
+    #pragma omp parallel for reduction(+:summation)
+    for (int i = 0; i < particles.size(); i++) {
+        particles[i]->setWeight(1 / particles[i]->distance(obs));
+        summation += particles[i]->getWeight();
+    }
+
+    #pragma omp parallel for
+    for (int i = 0; i < particles.size(); i++) {
+        particles[i]->normalizeWeight(summation);
+    }
+}
+
+void ParticleFilter::computeKinectWeights(Eigen::Matrix<float, 3, 1> &obs) {
     float summation = 0.0f;
 
     #pragma omp parallel for reduction(+:summation)
@@ -99,7 +130,7 @@ void ParticleFilter::resample()
             ParticlePtr perturbated = particles[i]->perturbate(gauss(gen), gauss(gen));
             newParticles.push_back(perturbated);
         }
-        if (newParticles.size() >= particles.size()) {
+        if (newParticles.size() >= num_particles) {
             break;
         }
     }
@@ -110,18 +141,37 @@ void ParticleFilter::resample()
     particles = newParticles;
 }
 
+void ParticleFilter::track(const geometry_msgs::Point &pose) 
+{
+    Eigen::Matrix<float, 2, 1> obs;
+    obs << pose.x, pose.y;
+
+    updateParticles(obs);
+    propagateParticles();
+    computeWeights(obs);
+    resample();
+    // publishParticles();
+    // missing update of velocity and theta!
+}
 
 void ParticleFilter::track(const geometry_msgs::Pose &pose) {
     
-    Eigen::Matrix<float, 1, 3> obs;
+    Eigen::Matrix<float, 3, 1> obs;
     obs << pose.position.x, pose.position.y, pose.orientation.z;
 
     updateParticles(obs);
     propagateParticles();
     computeWeights(obs);
     resample();
-    publishParticles();
+    // publishParticles();
     // missing update of velocity and theta!
+}
+
+void ParticleFilter::deepCopy(const ParticleList &cloud)
+{
+    for (int i = 0; i < cloud.size(); i++) {
+        this->particles.push_back(new Particle(*cloud[i]));
+    }
 }
 
 void ParticleFilter::deleteOldParticles() {
@@ -145,7 +195,17 @@ void ParticleFilter::publishParticles() {
     }
 
     pub.publish(cloud);
+}
 
+void ParticleFilter::fillPoseArray(geometry_msgs::PoseArray &poses)
+{
+    #pragma omp parallel for
+    for (int i = 0; i < particles.size(); i++) {
+        geometry_msgs::Pose pose;
+        particles[i]->fillPose(pose);
+        #pragma omp critical
+        poses.poses.push_back(pose);
+    }
 }
 
 void ParticleFilter::peopleDetectedCallback(const player_tracker::PersonArray &msg){
@@ -185,3 +245,22 @@ std::vector<bool> ParticleFilter::blockObservation(const player_tracker::PersonA
 
     return blocked;
 }
+
+float ParticleFilter::computeAssociation(const geometry_msgs::Pose &person) const
+{
+    return computeAssociation(person.position);
+}
+
+float ParticleFilter::computeAssociation(const geometry_msgs::Point &person) const
+{
+    float association  = 0.0f;
+    Vec2f pose;
+    pose << person.x, person.y;
+    #pragma omp parallel for reduction(+:association)
+    for (int i = 0; i < particles.size(); i++) {
+        association += particles[i]->confidenceLevel(pose);
+    }
+
+    return association;
+}
+

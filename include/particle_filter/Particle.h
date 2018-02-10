@@ -40,7 +40,8 @@ public:
 
     // void drift();
 
-    float distance(Eigen::Matrix<float, 1, 3> &measure);
+    float distance(Eigen::Matrix<float, 3, 1> &measure);
+    float distance(Eigen::Matrix<float, 2, 1> &measure);
 
     void fillPose(geometry_msgs::Pose &pose);
 
@@ -52,7 +53,8 @@ public:
     /*
      * Implements standard Kalman filter update equation
      */
-    void update(Eigen::Matrix<float, 1, 3> &Z);
+    void update(Eigen::Matrix<float, 3, 1> &Z);
+    void update(Eigen::Matrix<float, 2, 1> &Z);
 
     Particle* perturbate(float noiseX, float noiseY, float noiseTheta=0.0f) const;
 

@@ -35,6 +35,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 add_message_files(
   FILES
+  Blob.msg
   Person.msg
   PersonArray.msg
   Leg.msg
@@ -109,11 +110,24 @@ add_executable(
   particle_filter
   src/particle_filter/Particle.cpp
   src/particle_filter/ParticleFilter.cpp
+  src/particle_filter/MultipleParticleFilter.cpp
   src/particle_filter/pf_tracker.cpp
 )
 
 target_link_libraries(
   particle_filter
+  ${catkin_LIBRARIES}
+  ${Eigen3_LIBRARIES}
+)
+
+add_executable(
+  blob_publisher
+  src/particle_filter/blob_publisher.cpp
+  src/particle_filter/BlobPublisher.cpp
+)
+
+target_link_libraries(
+  blob_publisher
   ${catkin_LIBRARIES}
   ${Eigen3_LIBRARIES}
 )

@@ -66,10 +66,15 @@ void Particle::propagate(){
     P = F*P*F.transpose() + Q;
 }
 
-float Particle::distance(RowVec3f &measure) {
+float Particle::distance(Eigen::Vector3f &measure) {
     Eigen::Vector2f pose = state.topRows(2);
-    auto m = measure.transpose();
-    Eigen::Vector2f obs = m.topRows(2);
+    Eigen::Vector2f obs = measure.topRows(2);
+    return (pose - obs).norm();
+}
+
+float Particle::distance(Eigen::Vector2f &obs) 
+{
+    Eigen::Vector2f pose = state.topRows(2);
     return (pose - obs).norm();
 }
 
@@ -94,12 +99,18 @@ void Particle::normalizeWeight(float summation) {
 /*
  * Implements standard Kalman filter update equation
  */
-void Particle::update(RowVec3f &Z){
-    auto Y =  Z.transpose() - (H*state);
+void Particle::update(Eigen::Vector3f &Z) {
+    auto Y =  Z - (H*state);
     auto S = ((H*P) * H.transpose()) + R;
     auto K = (P * H.transpose()) * S.inverse();
     state = state + (K * Y);
     P = (I - (K*H)) * P;
+}
+
+void Particle::update(Eigen::Vector2f &z) {
+    Eigen::Vector3f Z;
+    Z << z.x(), z.y(), 0;
+    update(Z);
 }
 
 ParticlePtr Particle::perturbate(float noiseX, float noiseY, float noiseTheta) const
@@ -117,6 +128,8 @@ float Particle::confidenceLevel(Vec2f &person)
 {
     // ellipsoid (x/sigma_x)^2 + (y/sigma_y)^2 = s (s=5.991 for 95%)
     Vec2f diff = state.topRows(2) - person;
+    diff(0) /= P(0, 0); // sigma_x
+    diff(1) /= P(1, 1); // sigma_y
     return diff.transpose() * diff;
 }
 

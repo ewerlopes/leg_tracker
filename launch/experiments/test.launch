@@ -17,7 +17,15 @@
 
   <!-- run particle_filter -->
   <node pkg="player_tracker" type="particle_filter" name="particle_filter" output="screen"/>
- 
+  <!-- run fake blob publisher node -->
+  <!--
+  <node pkg="player_tracker" type="blob_publisher" name="blob_publisher" output="screen" >
+    <param name="player_frame" value="/player_link"/>
+    <param name="reference_frame" value="/map"/>
+    <param name="fov_topic" value="/fov_marker"/>
+    <param name="blob_topic" value="/blob_detection"/> 
+  </node>
+ -->
    <!-- run local_occupancy_grid_mapping -->
   <node pkg="player_tracker" type="local_occupancy_grid_mapping" name="local_occupancy_grid_mapping" output="screen"/>
   
