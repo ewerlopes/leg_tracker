@@ -5,10 +5,10 @@
 
 int main(int argc, char** argv){
     
-    ros::init(argc, argv, "player_blob_transformer");
+    ros::init(argc, argv, "blob_publisher");
 
     ros::NodeHandle nh;
-    BlobPublisher blobPub(nh, "/player_blob_transformer");
+    BlobPublisher blobPub(nh, "/blob_publisher");
     ros::spin();
 
     return 0;

@@ -31,12 +31,17 @@ void BlobPublisher::fovCallback(const visualization_msgs::Marker &fov)
     msg.observed = false;
     msg.id = 1;
     
+
     robot << fov.points[0].x, fov.points[0].y;
     fov1 << fov.points[1].x, fov.points[1].y;
     fov2 << fov.points[3].x, fov.points[3].y;
 
-    try{
+    msg.fov_sx.x = fov1.x();
+    msg.fov_sx.y = fov1.y();
+    msg.fov_dx.x = fov2.x();
+    msg.fov_dx.y = fov2.y();
 
+    try{
         msg.pose = getPlayerPose();
         msg.observed = isInFov(msg.pose, robot, fov1, fov2);
         blobPub.publish(msg);
@@ -51,8 +56,8 @@ geometry_msgs::Pose BlobPublisher::getPlayerPose()
     geometry_msgs::PoseStamped player;
     tf::StampedTransform transform;
     
-    listener.waitForTransform(this->playerFrameName, this->referenceFrameName, ros::Time(0), ros::Duration(3.0));
-    listener.lookupTransform(this->playerFrameName, this->referenceFrameName, ros::Time(0), transform);
+    listener.waitForTransform(this->referenceFrameName, this->playerFrameName, ros::Time(0), ros::Duration(3.0));
+    listener.lookupTransform(this->referenceFrameName, this->playerFrameName, ros::Time(0), transform);
     convert(transform, player);
     
     return player.pose;
