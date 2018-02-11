@@ -44,7 +44,7 @@ void ParticleFilter::initParticles() {  // particles init at random
     for (int p=0; p < particles.size();p++) {
         Eigen::Matrix<float, 5, 1> state;
         // assumed -10 lowest x, 10 highest x possible (field of robogame)
-        state << rand_FloatRange(-10, 10), rand_FloatRange(-10, 10), rand_FloatRange(0, 2*M_PI), 0, 0;  // TODO fix ranges of field
+        state << rand_FloatRange(-1, 7), rand_FloatRange(-2, 7), rand_FloatRange(0, 2*M_PI), 0, 0;  // TODO fix ranges of field
         particles[p] = new Particle(state);
     }
 }
@@ -135,7 +135,7 @@ void ParticleFilter::resample()
         }
     }
 
-    std::cout << "num particles: " << newParticles.size() << std::endl;
+    // std::cout << "num particles: " << newParticles.size() << std::endl;
     deleteOldParticles();
 
     particles = newParticles;
@@ -262,5 +262,21 @@ float ParticleFilter::computeAssociation(const geometry_msgs::Point &person) con
     }
 
     return association;
+}
+
+Vec2f ParticleFilter::getCenter()
+{
+    float x = 0;
+    float y = 0;
+
+    #pragma omp parallel for reduction(+:x,y)
+    for (int i = 0; i < particles.size(); i++) {
+        Vec5f state = particles[i]->getState();
+
+        x += state(0);
+        y += state(1);
+    }
+
+    return Vec2f(x / (float)particles.size(), y / (float)particles.size());
 }
 

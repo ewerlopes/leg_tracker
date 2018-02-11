@@ -66,6 +66,8 @@ public:
     virtual float computeAssociation(const geometry_msgs::Point &person) const;
 
     virtual void fillPoseArray(geometry_msgs::PoseArray &poses);
+
+    virtual Vec2f getCenter();
 };
 
 typedef ParticleFilter* ParticleFilterPtr;
