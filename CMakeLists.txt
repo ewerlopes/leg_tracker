@@ -90,6 +90,16 @@ target_link_libraries(
   ${catkin_LIBRARIES}
 )
 
+add_executable(
+  test_local_occupancy_grid_mapping
+  src/test_local_occupancy_grid_mapping.cpp
+  src/laser_processor.cpp
+)
+target_link_libraries(
+  test_local_occupancy_grid_mapping 
+  ${catkin_LIBRARIES}
+)
+
 
 add_executable(
   extract_positive_training_clusters
@@ -142,6 +152,7 @@ target_link_libraries(
   ${Eigen3_LIBRARIES}
 )
 
+add_dependencies(test_local_occupancy_grid_mapping ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(local_occupancy_grid_mapping ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(local_occupancy_grid_mapping ${PROJECT_NAME}_gencpp)
 add_dependencies(local_occupancy_grid_mapping ${PROJECT_NAME}_gencfg)
