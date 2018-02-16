@@ -288,6 +288,7 @@ class Tracker:
 
             rotation_mtx = self.perception_grid_projector.get_rotation_matrix(self.map_kp, self.map_desc, self.perc_kp, self.perc_desc)
             trans_ = self.perception_grid_projector.project_image(rotation_mtx, image)
+            print trans_
             cv2.imwrite('/home/airlab/Scrivania/trans_.png',trans_)
 
     def map_callback(self, msg):
