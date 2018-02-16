@@ -22,11 +22,17 @@ import timeit
 import message_filters
 import sys
 import tf
+import cv2
 
 from itertools import groupby
 from operator import itemgetter
 
 from geometry_msgs.msg import PointStamped, Point
+from sensor_msgs.msg import PointCloud2
+
+from perception_grid_match import PerceptionGridProjector
+from sensor_msgs import point_cloud2
+from laser_geometry import LaserProjection
 
 # External modules
 from munkres import Munkres # For the minimum matching assignment problem. To install: https://pypi.python.org/pypi/munkres 
@@ -187,8 +193,6 @@ class ObjectTracked:
         else:
             self.colour = (0.2,0.2,0.2)
 
-    
-
 
 class Tracker:    
     """
@@ -239,19 +243,71 @@ class Tracker:
         self.people_detected_pub = rospy.Publisher('people_detected', PersonArray, queue_size=300)
         self.marker_pub = rospy.Publisher('visualization_marker', Marker, queue_size=300)
         self.non_leg_clusters_pub = rospy.Publisher('non_leg_clusters', LegArray, queue_size=300)
+        self.laser_cloud_pub = rospy.Publisher('laser_cloud', PointCloud2, queue_size=1)
 
         # ROS subscribers         
         self.detected_clusters_sub = rospy.Subscriber('person_evidence_array', PersonEvidenceArray, self.evidenceCallback)
         #self.detected_clusters_sub = rospy.Subscriber('detected_leg_clusters', LegArray, self.detected_clusters_callback)      
         self.local_map_sub = rospy.Subscriber('local_map', OccupancyGrid, self.local_map_callback)
+        self.sub_map = rospy.Subscriber('map', OccupancyGrid, self.map_callback)  # create map subscriber
+        self.sub_local_grid = rospy.Subscriber('test_local_map', OccupancyGrid, self.local_grid_callback)  # create map subscriber
+        #self.sub_laser = rospy.Subscriber('/scan', LaserScan, self.laser_callback)  # create laser subscriber
+        
+
+
 
         # Polar grid
         self.polar_grid = PolarGrid()
 
         self.tf_listener = tf.TransformListener()
 
+        self.map_kp = None
+        self.map_desc  = None
+
+        self.perc_kp = None
+        self.perc_desc = None
+
+        self.laser_projection = LaserProjection()
+        self.perception_grid_projector = PerceptionGridProjector()
+
         rospy.spin() # So the node doesn't immediately shut down
-                    
+
+    def local_grid_callback(self,msg):
+        if self.map_kp is not None and self.map_desc is not None:
+            image = np.array(copy.deepcopy(msg.data)).reshape(msg.info.width,msg.info.height)
+            # fix range of map
+            image = 255 - image * (255.0/float(image.max()))
+
+            image=image.astype(np.uint8)
+            #cv2.namedWindow('image', cv2.WINDOW_NORMAL)
+            #cv2.imshow('image',image)
+            #cv2.imwrite('/home/airlab/Scrivania/image_grid.png',image)
+
+            # map descriptor
+            self.perc_kp, self.perc_desc = self.perception_grid_projector.compute_descriptors(image)
+
+            rotation_mtx = self.perception_grid_projector.get_rotation_matrix(self.map_kp, self.map_desc, self.perc_kp, self.perc_desc)
+            trans_ = self.perception_grid_projector.project_image(rotation_mtx, image)
+            cv2.imwrite('/home/airlab/Scrivania/trans_.png',trans_)
+
+    def map_callback(self, msg):
+        image = np.array(copy.deepcopy(msg.data)).reshape(msg.info.width,msg.info.height)
+
+        # fix range of map
+        image = 255 - image * (255.0/float(image.max()))
+
+        image=image.astype(np.uint8)
+        
+        #cv2.namedWindow('image', cv2.WINDOW_NORMAL)
+        #cv2.imshow('image',image)
+        #cv2.imwrite('/home/airlab/Scrivania/image.png',image)
+
+        # map descriptor
+        self.map_kp, self.map_desc = self.perception_grid_projector.compute_descriptors(image)
+        
+        # unsubscribe to topic map. We need it only once.
+        self.sub_map.unregister()
+        rospy.logwarn("Unsubscribed to map")
 
     def local_map_callback(self, map):
         """
@@ -546,7 +602,6 @@ class Tracker:
         else:
             raise Exception('x and b must be Position instances')
         return np.exp(-lda*np.dot(np.transpose(np.array(x)-np.array(b)),(np.array(x)-np.array(b))))
-
 
     def publish_tracked_people(self, now):
         """

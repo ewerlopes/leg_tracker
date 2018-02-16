@@ -24,6 +24,8 @@
  
    <!-- run local_occupancy_grid_mapping -->
   <node pkg="player_tracker" type="local_occupancy_grid_mapping" name="local_occupancy_grid_mapping" output="screen"/>
+
+  <node pkg="player_tracker" type="test_local_occupancy_grid_mapping" name="test_local_occupancy_grid_mapping" output="screen"/>
   
   <!-- run rviz -->                
   <node pkg="rviz" type="rviz" name="rviz" />

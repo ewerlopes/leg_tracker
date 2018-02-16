@@ -9,28 +9,22 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/Odometry.h>
 #include <sensor_msgs/LaserScan.h>
-#include <visualization_msgs/Marker.h>
 
 // Custom messages
-#include <player_tracker/Leg.h>
-#include <player_tracker/LegArray.h>
-
 #include <player_tracker/laser_processor.h>
 
 /** @todo Make these parameters externally settable */
 #define ALPHA 0.2
-#define BETA 0.1
-#define OBSTACLE 0.7
-#define FREE_SPACE 0.4
+#define BETA 0.2 //0.1
+#define OBSTACLE 1 //0.7
+#define FREE_SPACE 0.2
 #define UNKNOWN 0.5
 #define MIN_PROB 0.001
 #define MAX_PROB 1 - MIN_PROB
 
 /**
-* @basic A simple 'local' occupancy grid map that maps everything except tracked
-* humans
-* Maps a small area around the robot. The occupied areas on the map are all
-* non-human obstacles.
+* @basic A simple 'local' occupancy grid map that maps a small area around the robot.
+* The occupied areas on the map are all obstacles.
 */
 class OccupancyGridMapping {
 public:
@@ -39,17 +33,14 @@ public:
   * @param nh A nodehandle
   * @param scan_topic The topic for the scan we would like to map
   */
-  OccupancyGridMapping(ros::NodeHandle nh, std::string scan_topic)
-      : nh_(nh), grid_centre_pos_found_(false), scan_topic_(scan_topic),
-        scan_sub_(nh_, scan_topic, 100),
-        non_leg_clusters_sub_(nh_, "non_leg_clusters", 100),
-        sync(scan_sub_, non_leg_clusters_sub_, 100) {
+  OccupancyGridMapping(ros::NodeHandle nh, std::string scan_topic): nh_(nh), 
+  		grid_centre_pos_found_(false), scan_topic_(scan_topic){
 
     ros::NodeHandle nh_private("~");
     std::string local_map_topic;
     nh_.param("fixed_frame", fixed_frame_, std::string("odom"));
     nh_.param("base_frame", base_frame_, std::string("base_link"));
-    nh_private.param("local_map_topic", local_map_topic, std::string("local_map"));
+    nh_private.param("local_map_topic", local_map_topic, std::string("test_local_map"));
     nh_private.param("local_map_resolution", resolution_, 0.05);
     nh_private.param("local_map_cells_per_side", width_, 400);
     nh_private.param("invalid_measurements_are_free_space", invalid_measurements_are_free_space_, false);
@@ -76,12 +67,10 @@ public:
       }
     }
 
-    // To coordinate callback for both laser scan message and a non_leg_clusters
-    // message
-    sync.registerCallback(boost::bind(&OccupancyGridMapping::laserAndLegCallback, this, _1, _2));
-
+	scan_sub_ = nh_.subscribe("/scan", 1, &OccupancyGridMapping::laserCallback, this);
     map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>(local_map_topic, 10);
-    markers_pub_ = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 20);
+
+	timer = nh_.createTimer(ros::Duration(0.05), &OccupancyGridMapping::reset, this);
   }
 
 private:
@@ -90,17 +79,13 @@ private:
 	std::string base_frame_;
 
 	ros::NodeHandle nh_;
-	message_filters::Subscriber<sensor_msgs::LaserScan> scan_sub_;
-	message_filters::Subscriber<player_tracker::LegArray> non_leg_clusters_sub_;
-	message_filters::TimeSynchronizer<sensor_msgs::LaserScan, player_tracker::LegArray> sync;
 
-	ros::Subscriber odom_sub_;
-	ros::Subscriber pose_sub_;
+	ros::Subscriber scan_sub_;
 	ros::Publisher map_pub_;
-	ros::Publisher markers_pub_;
 
 	ros::Time last_time_;
 	ros::Time latest_scan_header_stamp_with_tf_available_;
+	ros::Timer timer;
 
 	std::vector<double> l_;
 
@@ -124,12 +109,30 @@ private:
 
 	tf::TransformListener tfl_;
 
+	void reset(const ros::TimerEvent&){
+
+		ROS_WARN("Reseting grid...");
+
+		// Initialize map
+		// All probabilities are held in log-space
+		l0_ = logit(UNKNOWN);
+		l_min_ = logit(MIN_PROB);
+		l_max_ = logit(MAX_PROB);
+		l_.resize(width_ * width_);
+		for (int i = 0; i < width_; i++){
+			for (int j = 0; j < width_; j++){
+				if (unseen_is_freespace_)
+					l_[i + width_ * j] = l_min_;
+				else
+					l_[i + width_ * j] = l0_;
+			}
+		}
+	}
+
 	/**
-	* @brief Coordinated callback for both laser scan message and a non_leg_clusters message
-	* Called whenever both topics have been recently published to
+	* @brief Coordinated callback for both laser scan message
 	*/
-	void laserAndLegCallback(const sensor_msgs::LaserScan::ConstPtr &scan_msg,
-		const player_tracker::LegArray::ConstPtr &non_leg_clusters) {
+	void laserCallback(const sensor_msgs::LaserScan::ConstPtr &scan_msg) {
 		
 		// Find out the time that should be used for tfs
 		bool transform_available;
@@ -152,66 +155,13 @@ private:
 		}
 
 		if (transform_available) {
-			// Next step: find scan beams that correspond to humans/tracked legs so
-			// we can count them as freespace in the grid occupancy map
-
-			// Transform tracked legs back into the laser frame
-			std::vector<tf::Point> non_legs;
-			for (int i = 0; i < non_leg_clusters->legs.size(); i++) {
-				player_tracker::Leg leg = non_leg_clusters->legs[i];
-
-				tf::Point p;
-				p[0] = leg.position.x;
-				p[1] = leg.position.y;
-
-				tf::Stamped<tf::Point> ps(p, tf_time, fixed_frame_);
-				try {
-					tfl_.transformPoint(scan_msg->header.frame_id, ps, ps);
-					non_legs.push_back(tf::Point(ps[0], ps[1], 0));
-				} catch (tf::TransformException ex) {
-					ROS_ERROR("Local map tf error: %s", ex.what());
-				}
-			}
-
-			// Determine which scan samples correspond to humans
-			// so we can mark those areas as unoccupied in the map
-			std::vector<bool> is_sample_human;
-			is_sample_human.resize(scan_msg->ranges.size(), false);
-			sensor_msgs::LaserScan scan = *scan_msg;
-			laser_processor::ScanProcessor processor(scan);
-			processor.splitConnected(cluster_dist_euclid_);
-			processor.removeLessThan(min_points_per_cluster_);
-			
-			for (std::list<laser_processor::SampleSet *>::iterator c_iter = processor.getClusters().begin();
-           			c_iter != processor.getClusters().end(); ++c_iter) {
-
-				bool is_cluster_human = true;
-				tf::Point c_pos = (*c_iter)->getPosition();
-
-				// Check every point in the <non_legs> message to see
-				// if the scan cluster is within an epsilon distance of the cluster
-				for (std::vector<tf::Point>::iterator non_leg = non_legs.begin(); non_leg != non_legs.end(); ++non_leg) {
-					double dist = sqrt(pow((c_pos[0] - (*non_leg)[0]), 2) + pow((c_pos[1] - (*non_leg)[1]), 2));
-					if (dist < 0.1) {
-						non_legs.erase(non_leg);
-						is_cluster_human = false;
-						break;
-					}
-				}
-
-				// Set all scan samples in the cluster to <is_cluster_human>
-				for (laser_processor::SampleSet::iterator s_iter = (*c_iter)->begin(); s_iter != (*c_iter)->end(); ++s_iter) {
-					is_sample_human[(*s_iter)->index] = is_cluster_human;
-				}
-      		}
-
-			// Next step: Update the local grid occupancy map
+			// Get the local grid occupancy map
 
 			// Get the pose of the laser in the fixed frame
 			bool transform_succesful;
 			geometry_msgs::PoseStamped init_pose;
 			geometry_msgs::PoseStamped laser_pose_fixed_frame;
-			init_pose.header.frame_id = scan.header.frame_id;
+			init_pose.header.frame_id = scan_msg->header.frame_id;
 			init_pose.pose.orientation = tf::createQuaternionMsgFromYaw(0.0);
 			init_pose.header.stamp = tf_time;
 			try {
@@ -278,26 +228,25 @@ private:
 										i * resolution_ + grid_centre_pos_x_ - (width_ / 2.0) * resolution_ - laser_x) - laser_yaw);
 						bool is_human;
 
-					if (angle > scan.angle_min - scan.angle_increment / 2.0 and angle < scan.angle_max + scan.angle_increment / 2.0) {
+					if (angle > scan_msg->angle_min - scan_msg->angle_increment / 2.0 and angle < scan_msg->angle_max + scan_msg->angle_increment / 2.0) {
 						// Find applicable laser measurement
-						double closest_beam_angle = round(angle / scan.angle_increment) * scan.angle_increment;
-						int closest_beam_idx = (int)round(angle / scan.angle_increment) + scan.ranges.size() / 2;
-						is_human = is_sample_human[closest_beam_idx];
+						double closest_beam_angle = round(angle / scan_msg->angle_increment) * scan_msg->angle_increment;
+						int closest_beam_idx = (int)round(angle / scan_msg->angle_increment) + scan_msg->ranges.size() / 2;
 
 						// Processing the range value of the closest_beam to determine if
 						// it's a valid measurement or not.
 						// Sometimes it returns infs and NaNs that have to be dealt with
 						bool valid_measurement;
-						if (scan.range_min <= scan.ranges[closest_beam_idx] && scan.ranges[closest_beam_idx] <= scan.range_max) {
+						if (scan_msg->range_min <= scan_msg->ranges[closest_beam_idx] && scan_msg->ranges[closest_beam_idx] <= scan_msg->range_max) {
 							// This is a valid measurement.
 							valid_measurement = true;
-						} else if (!std::isfinite(scan.ranges[closest_beam_idx]) && scan.ranges[closest_beam_idx] < 0) {
+						} else if (!std::isfinite(scan_msg->ranges[closest_beam_idx]) && scan_msg->ranges[closest_beam_idx] < 0) {
 							// Object too close to measure.
 							valid_measurement = false;
-						} else if (!std::isfinite(scan.ranges[closest_beam_idx]) && scan.ranges[closest_beam_idx] > 0) {
+						} else if (!std::isfinite(scan_msg->ranges[closest_beam_idx]) && scan_msg->ranges[closest_beam_idx] > 0) {
 							// No objects detected in range.
 							valid_measurement = true;
-						} else if (std::isnan(scan.ranges[closest_beam_idx])) {
+						} else if (std::isnan(scan_msg->ranges[closest_beam_idx])) {
 							// This is an erroneous, invalid, or missing measurement.
 							valid_measurement = false;
 						} else {
@@ -308,12 +257,12 @@ private:
 						}
 
 						if (valid_measurement) {
-							double dist_rel = dist - scan.ranges[closest_beam_idx];
+							double dist_rel = dist - scan_msg->ranges[closest_beam_idx];
 							double angle_rel = angle - closest_beam_angle;
-							if (dist > scan.range_max or dist > scan.ranges[closest_beam_idx] + ALPHA / 2.0 or
-								fabs(angle_rel) > BETA / 2 or (!std::isfinite(scan.ranges[closest_beam_idx]) and dist > reliable_inf_range_))
+							if (dist > scan_msg->range_max or dist > scan_msg->ranges[closest_beam_idx] + ALPHA / 2.0 or
+								fabs(angle_rel) > BETA / 2 or (!std::isfinite(scan_msg->ranges[closest_beam_idx]) and dist > reliable_inf_range_))
 								m_update = UNKNOWN;
-							else if (scan.ranges[closest_beam_idx] < scan.range_max and fabs(dist_rel) < ALPHA / 2 and !is_human)
+							else if (scan_msg->ranges[closest_beam_idx] < scan_msg->range_max and fabs(dist_rel) < ALPHA / 2 and !is_human)
 								m_update = OBSTACLE;
 							else
 								m_update = FREE_SPACE;
