@@ -37,6 +37,7 @@ find_package(catkin REQUIRED COMPONENTS
   rosbag
   image_geometry
   message_generation
+  laser_geometry
 )
 
 add_message_files(
@@ -133,6 +134,16 @@ add_executable(
 
 target_link_libraries(
   particle_filter
+  ${catkin_LIBRARIES}
+  ${Eigen3_LIBRARIES}
+)
+
+add_executable(
+  motion_detector
+  src/motion_detector.cpp
+)
+target_link_libraries(
+  motion_detector 
   ${catkin_LIBRARIES}
   ${Eigen3_LIBRARIES}
 )
