@@ -89,6 +89,13 @@ private:
         }
     }
 
+    void setTemporal(sensor_msgs::PointCloud &cloud, double time){
+        #pragma omp parallel for    
+        for (int i=0; i < cloud.points.size(); i++){
+            cloud.points[i].z = time;
+        }
+    }
+
     /**
     * @brief callback for laser scan message
     */
@@ -98,7 +105,6 @@ private:
         if (!tf_listener.waitForTransform(scan_msg->header.frame_id,
             base_frame_, scan_msg->header.stamp + ros::Duration().fromSec(scan_msg->ranges.size() * 
             scan_msg->time_increment), ros::Duration(1.0))) {
-            
             return;
         }
 
@@ -106,24 +112,24 @@ private:
 
         if (!on_window){
             ROS_WARN("Starting windows...");
+            on_window = true;
             start_time = scan_msg->header.stamp;
             getPointCloud(scan_msg,cloud);
-            on_window = true;
-            
+
         }else if ((scan_msg->header.stamp.toSec() - start_time.toSec()) < window_duration_.toSec()){
             ROS_INFO("Inside windows...");
             ROS_INFO("Time: %f", (scan_msg->header.stamp.toSec() - start_time.toSec()));
-            getPointCloud(scan_msg,cloud);
-
-            //publishMergedCloud(start_time, ros::Time::now());
-            publishMergedCloud(ros::Time(0.0), ros::Time::now());
-            
+            getPointCloud(scan_msg,cloud);  
         }else{
             ROS_WARN("Resetting...");
             on_window = false;
 
             return;
         }
+
+        setTemporal(cloud, (scan_msg->header.stamp.toSec() - start_time.toSec()));
+        //publishMergedCloud(start_time, ros::Time::now());
+        publishMergedCloud(ros::Time(0.0), ros::Time::now());
 
         // publich point cloud
         cloud_pub.publish(cloud);
