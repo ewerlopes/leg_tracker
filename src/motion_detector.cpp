@@ -1,18 +1,17 @@
+#include <eigen3/Eigen/Dense>
+
 #include <ros/ros.h>
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_listener.h>
-
-#include <eigen3/Eigen/Dense>
+#include <laser_geometry/laser_geometry.h>
+#include <laser_assembler/AssembleScans.h>
 
 // ROS messages
 #include <geometry_msgs/PoseStamped.h>
-#include <laser_geometry/laser_geometry.h>
-#include <message_filters/subscriber.h>
-#include <message_filters/time_synchronizer.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/Odometry.h>
 #include <sensor_msgs/LaserScan.h>
-#include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/PointCloud.h>
 
 /**
 * @basic The motion detector algorithm in Shen, Xiaotong, Seong-Woo Kim, and
@@ -31,28 +30,26 @@ public:
     * @param scan_topic The topic for the scan we would like to map
     */
     MotionDetector(ros::NodeHandle nh, std::string scan_topic, float window_duration)
-        : nh_(nh), scan_topic_(scan_topic), window_duration_(window_duration) {
+        : nh_(nh), scan_topic_(scan_topic), window_duration_(window_duration), on_window(false) {
         ros::NodeHandle nh_private("~");
         base_frame_ = "odom";
         scan_sub_ = nh_.subscribe("/scan", 1, &MotionDetector::laserCallback, this);
-        cloud_pub = nh_.advertise<sensor_msgs::PointCloud2>("laser_cloud", 10);
+        merged_cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("merged_cloud", 10);
+        cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("laser_cloud", 10);
+
+        ros::service::waitForService("assemble_scans");
+        client = nh_.serviceClient<laser_assembler::AssembleScans>("assemble_scans");
     }
-
-    ~MotionDetector(){
-        clearPoints();
-    }
-
-
 
 private:
     std::string scan_topic_;
     std::string fixed_frame_;
     std::string base_frame_;
 
-    ros::Duration window_duration_;// delta_t
-    long double start_time;      // t_s
+    bool on_window;
 
-    std::vector< sensor_msgs::PointCloud2*> points;
+    ros::Duration window_duration_;// delta_t
+    ros::Time start_time;          // t_s
 
     // static_pts_set;             // S_t
     // movint_pts_set;             // M_t
@@ -65,17 +62,31 @@ private:
     ros::NodeHandle nh_;
     ros::Subscriber scan_sub_;
     ros::Publisher cloud_pub;
+    ros::Publisher merged_cloud_pub;
     tf::TransformListener tf_listener;
 
-    void clearPoints(){
-        #pragma omp parallel for
-        for (int i = 0; i < points.size(); i++) {
-            delete points[i];
-        }
+    laser_assembler::AssembleScans srv;
+    ros::ServiceClient client;
+
+    /**
+    * @brief gets the pointcloud from laserScan
+    */
+    void getPointCloud(const sensor_msgs::LaserScan::ConstPtr &scan_msg, sensor_msgs::PointCloud &cloud){
+        projector_.transformLaserScanToPointCloud(base_frame_,*scan_msg, cloud,tf_listener);
     }
 
-    void getPointCloud(const sensor_msgs::LaserScan::ConstPtr &scan_msg, sensor_msgs::PointCloud2 &cloud){
-        projector_.transformLaserScanToPointCloud(base_frame_,*scan_msg, cloud,tf_listener);
+    void publishMergedCloud(ros::Time from, ros::Time to){
+        srv.request.begin = from;
+        srv.request.end   = to;
+        
+        ROS_WARN("Time diff: %f", (srv.request.end.toSec() - start_time.toSec()));
+
+        if (client.call(srv)){
+            ROS_INFO("Got cloud with %lu points\n", srv.response.cloud.points.size());
+                merged_cloud_pub.publish(srv.response.cloud);
+        }else{
+            ROS_ERROR("Service call to assemble_scans failed\n");
+        }
     }
 
     /**
@@ -91,29 +102,31 @@ private:
             return;
         }
 
-        sensor_msgs::PointCloud2* cloud = new sensor_msgs::PointCloud2();
+        sensor_msgs::PointCloud cloud;
 
-        if (points.empty()){
+        if (!on_window){
             ROS_WARN("Starting windows...");
-            start_time = scan_msg->header.stamp.toSec();
-            getPointCloud(scan_msg,*cloud);
-            points.push_back(cloud);
-        }else if ((scan_msg->header.stamp.toSec() - start_time) < window_duration_.toSec()){
+            start_time = scan_msg->header.stamp;
+            getPointCloud(scan_msg,cloud);
+            on_window = true;
+            
+        }else if ((scan_msg->header.stamp.toSec() - start_time.toSec()) < window_duration_.toSec()){
             ROS_INFO("Inside windows...");
-            ROS_INFO("List size: %lu", points.size());
-            ROS_INFO("Time: %Lf", (scan_msg->header.stamp.toSec() - start_time));
-            getPointCloud(scan_msg,*cloud);
-            points.push_back(cloud);
+            ROS_INFO("Time: %f", (scan_msg->header.stamp.toSec() - start_time.toSec()));
+            getPointCloud(scan_msg,cloud);
+
+            //publishMergedCloud(start_time, ros::Time::now());
+            publishMergedCloud(ros::Time(0.0), ros::Time::now());
+            
         }else{
             ROS_WARN("Resetting...");
-            ROS_INFO("Empty: %d", points.empty());
-            clearPoints();
-            ROS_INFO("Empty: %d", points.empty());
+            on_window = false;
+
             return;
         }
 
         // publich point cloud
-        cloud_pub.publish(*cloud);
+        cloud_pub.publish(cloud);
 
     }
 
