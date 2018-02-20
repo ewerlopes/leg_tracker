@@ -37,7 +37,15 @@
     <!-- run local_occupancy_grid_mapping -->
     <node pkg="player_tracker" type="local_occupancy_grid_mapping" name="local_occupancy_grid_mapping" output="screen"/>
 
-    <node pkg="player_tracker" type="test_local_occupancy_grid_mapping" name="test_local_occupancy_grid_mapping" output="screen"/>
+  <!-- <node pkg="player_tracker" type="test_local_occupancy_grid_mapping" name="test_local_occupancy_grid_mapping" output="screen"/> -->
+
+  <node type="point_cloud_assembler" pkg="laser_assembler" name="cloud_assembler">
+    <remap from="cloud" to="laser_cloud"/>
+    <param name="max_clouds" type="int" value="400" />
+    <param name="fixed_frame" type="string" value="odom" />
+  </node>
+
+  <node pkg="player_tracker" type="motion_detector" name="motion_detector" output="screen"/>
   
     <!-- run rviz -->
     <node pkg="rviz" type="rviz" name="rviz" />

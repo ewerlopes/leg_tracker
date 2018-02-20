@@ -243,14 +243,14 @@ class Tracker:
         self.people_detected_pub = rospy.Publisher('people_detected', PersonArray, queue_size=300)
         self.marker_pub = rospy.Publisher('visualization_marker', Marker, queue_size=300)
         self.non_leg_clusters_pub = rospy.Publisher('non_leg_clusters', LegArray, queue_size=300)
-        self.laser_cloud_pub = rospy.Publisher('laser_cloud', PointCloud2, queue_size=1)
+        #self.laser_cloud_pub = rospy.Publisher('laser_cloud', PointCloud2, queue_size=1)
 
         # ROS subscribers         
         self.detected_clusters_sub = rospy.Subscriber('person_evidence_array', PersonEvidenceArray, self.evidenceCallback)
         #self.detected_clusters_sub = rospy.Subscriber('detected_leg_clusters', LegArray, self.detected_clusters_callback)      
         self.local_map_sub = rospy.Subscriber('local_map', OccupancyGrid, self.local_map_callback)
-        self.sub_map = rospy.Subscriber('map', OccupancyGrid, self.map_callback)  # create map subscriber
-        self.sub_local_grid = rospy.Subscriber('test_local_map', OccupancyGrid, self.local_grid_callback)  # create map subscriber
+        #self.sub_map = rospy.Subscriber('map', OccupancyGrid, self.map_callback)  # create map subscriber
+        #self.sub_local_grid = rospy.Subscriber('test_local_map', OccupancyGrid, self.local_grid_callback)  # create map subscriber
         #self.sub_laser = rospy.Subscriber('/scan', LaserScan, self.laser_callback)  # create laser subscriber
         
 

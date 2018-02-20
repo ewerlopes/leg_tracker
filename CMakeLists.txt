@@ -27,6 +27,15 @@ if(NOT Eigen3_FOUND)
     message(ERROR "Eigen3 not found!")
 endif(NOT Eigen3_FOUND)
 
+
+#########################################################
+# FIND Octomap
+#########################################################
+# find_package(octomap REQUIRED)
+# include_directories(${OCTOMAP_INCLUDE_DIRS})
+# link_libraries(${PROJECT_NAME} ${OCTOMAP_LIBRARIES})
+
+
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
@@ -37,6 +46,8 @@ find_package(catkin REQUIRED COMPONENTS
   rosbag
   image_geometry
   message_generation
+  laser_geometry
+  laser_assembler
 )
 
 add_message_files(
@@ -152,19 +163,29 @@ target_link_libraries(
   ${Eigen3_LIBRARIES}
 )
 
+add_executable(
+    motion_detector
+    src/motion_detector.cpp
+)
+
+target_link_libraries(
+  motion_detector 
+  ${catkin_LIBRARIES}
+  ${Eigen3_LIBRARIES}
+)
+
 add_dependencies(test_local_occupancy_grid_mapping ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(local_occupancy_grid_mapping ${PROJECT_NAME}_generate_messages_cpp)
-add_dependencies(local_occupancy_grid_mapping ${PROJECT_NAME}_gencpp)
 add_dependencies(local_occupancy_grid_mapping ${PROJECT_NAME}_gencfg)
 add_dependencies(detect_leg_clusters ${PROJECT_NAME}_generate_messages_cpp)
-add_dependencies(detect_leg_clusters ${PROJECT_NAME}_gencpp)
 add_dependencies(detect_leg_clusters ${PROJECT_NAME}_gencfg)
 add_dependencies(extract_positive_training_clusters ${PROJECT_NAME}_generate_messages_cpp)
-add_dependencies(extract_positive_training_clusters ${PROJECT_NAME}_gencpp)
 add_dependencies(extract_positive_training_clusters ${PROJECT_NAME}_gencfg)
 add_dependencies(train_leg_detector ${PROJECT_NAME}_generate_messages_cpp)
-add_dependencies(train_leg_detector ${PROJECT_NAME}_gencpp)
 add_dependencies(train_leg_detector ${PROJECT_NAME}_gencfg)
+add_dependencies(particle_filter ${PROJECT_NAME}_generate_messages_cpp)
+add_dependencies(motion_detector ${PROJECT_NAME}_generate_messages_cpp)
+add_dependencies(test_local_occupancy_grid_mapping ${PROJECT_NAME}_generate_messages_cpp)
 
 install(
   PROGRAMS scripts/joint_leg_tracker.py
