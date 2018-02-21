@@ -17,6 +17,14 @@ link_directories(${OpenCV_LIBRARY_DIRS})
 add_definitions(${OpenCV_DEFINITIONS})
 
 #########################################################
+# FIND PCL
+#########################################################
+find_package( PCL REQUIRED )
+include_directories(  ${catkin_INCLUDE_DIRS}  ${PCL_INCLUDE_DIRS} )
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
+
+#########################################################
 # FIND Eigen
 #########################################################
 find_package(Eigen3 REQUIRED eigen3)
@@ -174,6 +182,17 @@ target_link_libraries(
   ${Eigen3_LIBRARIES}
 )
 
+add_executable(
+    cloud_cluster
+    src/cloud_cluster.cpp
+)
+
+target_link_libraries(
+  cloud_cluster 
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
+
 add_dependencies(test_local_occupancy_grid_mapping ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(local_occupancy_grid_mapping ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(local_occupancy_grid_mapping ${PROJECT_NAME}_gencfg)
@@ -186,6 +205,8 @@ add_dependencies(train_leg_detector ${PROJECT_NAME}_gencfg)
 add_dependencies(particle_filter ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(motion_detector ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(test_local_occupancy_grid_mapping ${PROJECT_NAME}_generate_messages_cpp)
+add_dependencies(cloud_cluster ${PROJECT_NAME}_generate_messages_cpp)
+
 
 install(
   PROGRAMS scripts/joint_leg_tracker.py

@@ -31,7 +31,9 @@ public:
     /**
     * @basic Constructor
     * @param nh A nodehandle
-    * @param scan_topic The topic for the scan we would like to map
+    * @param scan_topic the scan topic we would like to use
+    * @param window_duration the slide windows duration in seconds
+    * @param log_filename the name of the file to save log data
     */
     MotionDetector(ros::NodeHandle nh, std::string scan_topic, float window_duration, std::string log_filename)
         : nh_(nh), scan_topic_(scan_topic), window_duration_(window_duration), on_window(false) {
@@ -44,11 +46,31 @@ public:
         ros::service::waitForService("assemble_scans");
         client = nh_.serviceClient<laser_assembler::AssembleScans>("assemble_scans");
 
-        log_file.open (log_filename);
+        log_file.open(log_filename);
+    }
+
+    /**
+    * @basic Constructor
+    * @param nh A nodehandle
+    * @param scan_topic the scan topic we would like to use
+    * @param window_duration the slide windows duration in seconds
+    */
+    MotionDetector(ros::NodeHandle nh, std::string scan_topic, float window_duration)
+        : nh_(nh), scan_topic_(scan_topic), window_duration_(window_duration), on_window(false) {
+        ros::NodeHandle nh_private("~");
+        base_frame_ = "odom";
+        scan_sub_ = nh_.subscribe("/scan", 1, &MotionDetector::laserCallback, this);
+        merged_cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("merged_cloud", 10);
+        cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("laser_cloud", 10);
+
+        ros::service::waitForService("assemble_scans");
+        client = nh_.serviceClient<laser_assembler::AssembleScans>("assemble_scans");
     }
 
     ~MotionDetector(){
-        log_file.close();
+        if (log_file.is_open()){
+            log_file.close();
+        }
     }
 
 private:
@@ -120,10 +142,18 @@ private:
         }
     }
 
-    void saveToLog(sensor_msgs::PointCloud &cloud, double time){
-        #pragma omp parallel for    
-        for (int i=0; i < cloud.points.size(); i++){
-            log_file << cloud.points[i].x << "," << cloud.points[i].y << "," << cloud.points[i].z << std::endl;
+    void saveToLog(std::string text){
+         if (log_file.is_open()){
+            log_file << text.c_str() << std::endl;
+        }
+    }
+
+    void saveCloudDataToLog(sensor_msgs::PointCloud &cloud){
+        if (log_file.is_open()){
+            #pragma omp parallel for    
+            for (int i=0; i < cloud.points.size(); i++){
+                log_file << cloud.points[i].x << "," << cloud.points[i].y << "," << cloud.points[i].z << std::endl;
+            }
         }
     }
 
@@ -153,7 +183,7 @@ private:
             getPointCloud(scan_msg,cloud);
         }else{
             ROS_WARN("Resetting...");
-            log_file << "--" << std::endl;
+            saveToLog("--");
             on_window = false;
             return;
         }
@@ -165,9 +195,9 @@ private:
         publishMergedCloud(ros::Time(0.0), ros::Time::now());
         
         // save to file
-        saveToLog(cloud, (scan_msg->header.stamp.toSec() - start_time.toSec()));
+        saveCloudDataToLog(cloud);
 
-        // publich point cloud
+        // publish point cloud
         cloud_pub.publish(cloud);
 
     }
@@ -181,7 +211,9 @@ int main(int argc, char **argv) {
     ros::NodeHandle nh;
     std::string scan_topic;
     nh.param("scan_topic", scan_topic, std::string("scan"));
-    MotionDetector md(nh, scan_topic, 1, "/home/airlab/Scrivania/log_file.txt");
+    //MotionDetector md(nh, scan_topic, 1, "/home/airlab/Scrivania/log_file.txt");
+
+    MotionDetector md(nh, scan_topic, 1.5);
 
     ros::spin();
     return 0;
