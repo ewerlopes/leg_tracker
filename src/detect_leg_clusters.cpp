@@ -232,8 +232,7 @@ private:
               new_leg.position.x = position[0];
               new_leg.position.y = position[1];
               new_leg.confidence = probability_of_leg;
-              new_leg.cluster = (*cluster)->getSamplesAsPointCloud();
-              new_leg.cluster.header = scan->header;
+              new_leg.points = (*cluster)->getSamples();
               leg_set.insert(new_leg);
             }
           }

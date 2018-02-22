@@ -81,19 +81,19 @@ tf::Point SampleSet::getPosition()
   return tf::Point (x_mean, y_mean, 0.0);
 }
 
-sensor_msgs::PointCloud SampleSet::getSamplesAsPointCloud(){
+std::vector<geometry_msgs::Point32> SampleSet::getSamples(){
 
-    sensor_msgs::PointCloud cloud; // NOTE: frame_id is_not set.
+    std::vector<geometry_msgs::Point32> points;
     #pragma omp parallel for
     for (iterator i = begin(); i != end(); ++i){
         geometry_msgs::Point32 point;
         point.x = (*i)->x;
         point.y = (*i)->y;
         point.z = 0.0;
-        cloud.points.push_back(point);
+        points.push_back(point);
     }
 
-    return cloud;
+    return points;
 }
 
 ScanProcessor::ScanProcessor(const sensor_msgs::LaserScan& scan) 

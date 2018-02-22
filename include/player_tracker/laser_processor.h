@@ -105,7 +105,7 @@ public:
   */
   void clear();
 
-  sensor_msgs::PointCloud getSamplesAsPointCloud();
+  std::vector<geometry_msgs::Point32> getSamples();
 
   /**
   * @brief Get the centroid of the sample points

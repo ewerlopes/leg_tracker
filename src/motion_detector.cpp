@@ -203,11 +203,10 @@ private:
     }
 
     void legClusterCallback(const player_tracker::LegArray::ConstPtr &leg_clusters_msg){
-
-        for (int i=0; i < leg_clusters_msg->legs.size(); i++){
-            sensor_msgs::PointCloud leg_cluster = leg_clusters_msg->legs[i].cluster;
-            ROS_INFO("Cluster %d frame_id: %s", i, leg_cluster.header.frame_id.c_str());
-        }
+        ROS_INFO("Cluster frame_id: %s", leg_clusters_msg->header.frame_id.c_str());
+        // for (int i=0; i < leg_clusters_msg->legs.size(); i++){
+        //     //sensor_msgs::PointCloud leg_cluster = leg_clusters_msg->legs[i].points;
+        // }
 
     }
 
