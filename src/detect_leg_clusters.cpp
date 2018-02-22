@@ -52,6 +52,8 @@
 #include <player_tracker/Leg.h>
 #include <player_tracker/LegArray.h>
 
+// ROS messages
+#include <sensor_msgs/PointCloud.h>
 
 
 /**
@@ -192,8 +194,7 @@ private:
       // Iterate through all clusters
       for (std::list<laser_processor::SampleSet*>::iterator cluster = processor.getClusters().begin();
        cluster != processor.getClusters().end();
-       cluster++)
-      {   
+       cluster++){   
         // Get position of cluster in laser frame
         tf::Stamped<tf::Point> position((*cluster)->getPosition(), tf_time, scan->header.frame_id);
         float rel_dist = pow(position[0]*position[0] + position[1]*position[1], 1./2.);
@@ -213,8 +214,7 @@ private:
             // Transform cluster position to fixed frame
             // This should always be succesful because we've checked earlier if a tf was available
             bool transform_successful_2;
-            try
-            {
+            try{
               tfl_.transformPoint(fixed_frame_, position, position);
               transform_successful_2 = true;
             }
@@ -227,10 +227,13 @@ private:
             if (transform_successful_2)
             {  
               // Add detected cluster to set of detected leg clusters, along with its relative position to the laser scanner
+              
               player_tracker::Leg new_leg;
               new_leg.position.x = position[0];
               new_leg.position.y = position[1];
               new_leg.confidence = probability_of_leg;
+              new_leg.cluster = (*cluster)->getSamplesAsPointCloud();
+              new_leg.cluster.header = scan->header;
               leg_set.insert(new_leg);
             }
           }

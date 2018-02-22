@@ -34,6 +34,9 @@
 
 #include <player_tracker/laser_processor.h>
 
+// ROS messages
+#include <sensor_msgs/PointCloud.h>
+#include <geometry_msgs/Point32.h>
 
 namespace laser_processor
 {
@@ -78,6 +81,20 @@ tf::Point SampleSet::getPosition()
   return tf::Point (x_mean, y_mean, 0.0);
 }
 
+sensor_msgs::PointCloud SampleSet::getSamplesAsPointCloud(){
+
+    sensor_msgs::PointCloud cloud; // NOTE: frame_id is_not set.
+
+    for (iterator i = begin(); i != end(); ++i){
+        geometry_msgs::Point32 point;
+        point.x = (*i)->x;
+        point.y = (*i)->y;
+        point.z = 0.0;
+        cloud.points.push_back(point);
+    }
+
+    return cloud;
+}
 
 ScanProcessor::ScanProcessor(const sensor_msgs::LaserScan& scan) 
 {

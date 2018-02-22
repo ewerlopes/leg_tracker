@@ -8,8 +8,8 @@
     <param name="leg_dist_model" value="$(find player_tracker)/model/leg_distance-gmm.pkl"/>
     <param name="perception_grid_topic" value="local_map" />
 
-    <!-- laser to grid parameteres -->
-    <rosparam file="$(find player_tracker)/config/laser_to_grid.yaml" command="load" ns="/laser_to_grid_node/costmap" />
+    <!-- laser to grid parameteres 
+    <rosparam file="$(find player_tracker)/config/laser_to_grid.yaml" command="load" ns="/laser_to_grid_node/costmap" />-->
 
     <!-- run detect_leg_clusters -->
     <node pkg="player_tracker" type="detect_leg_clusters" name="detect_leg_clusters" output="screen"/>

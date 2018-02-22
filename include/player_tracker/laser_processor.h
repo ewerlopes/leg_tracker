@@ -105,9 +105,11 @@ public:
   */
   void clear();
 
+  sensor_msgs::PointCloud getSamplesAsPointCloud();
+
   /**
   * @brief Get the centroid of the sample points
-  * @return Centriod in (x,y,0) (z-element assumed 0)
+  * @return Centroid in (x,y,0) (z-element assumed 0)
   */
   tf::Point getPosition();
 };
