@@ -74,6 +74,7 @@ public:
         merged_cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("merged_cloud", 10);
         cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("laser_cloud", 10);
         merged_cloud_cluster_pub = nh_.advertise<sensor_msgs::PointCloud2>("merged_clusters", 10);
+        leg_cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("leg_cloud", 10);
 
         ros::service::waitForService("assemble_scans");
         client = nh_.serviceClient<laser_assembler::AssembleScans>("assemble_scans");
@@ -99,6 +100,7 @@ public:
         merged_cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("merged_cloud", 10);
         cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("laser_cloud", 10);
         merged_cloud_cluster_pub = nh_.advertise<sensor_msgs::PointCloud2>("merged_clusters", 10);
+        leg_cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("leg_cloud", 10);
 
         ros::service::waitForService("assemble_scans");
         client = nh_.serviceClient<laser_assembler::AssembleScans>("assemble_scans");
@@ -137,6 +139,7 @@ private:
     ros::Publisher cloud_pub;                   // publishes laserScan as PointCloud
     ros::Publisher merged_cloud_pub;            // publish merged (across time) cloud
     ros::Publisher merged_cloud_cluster_pub;    // publish cluster clouds inside the merged one.
+    ros::Publisher leg_cloud_pub;
 
     ros::ServiceClient client;
     laser_assembler::AssembleScans srv;
@@ -204,9 +207,20 @@ private:
 
     void legClusterCallback(const player_tracker::LegArray::ConstPtr &leg_clusters_msg){
         ROS_INFO("Cluster frame_id: %s", leg_clusters_msg->header.frame_id.c_str());
-        // for (int i=0; i < leg_clusters_msg->legs.size(); i++){
-        //     //sensor_msgs::PointCloud leg_cluster = leg_clusters_msg->legs[i].points;
-        // }
+        for (int i=0; i < leg_clusters_msg->legs.size(); i++){
+            sensor_msgs::PointCloud cloud;
+            cloud.header = leg_clusters_msg->header;
+            cloud.points = leg_clusters_msg->legs[i].points;
+            tf_listener.transformPointCloud("odom", cloud, cloud);
+            leg_cloud_pub.publish(cloud);
+
+        //     for (int p=0; p < leg_clusters_msg->legs[i].points.size(); p++){
+        //         tf::Stamped<tf::Point> position((*cluster)->getPosition(), leg, scan->header.frame_id);
+        //         tf::Point position(leg_clusters_msg->legs[i].points[p].x, leg_clusters_msg->legs[i].points[p].y, leg_clusters_msg->legs[i].points[p].z); 
+        //         tf_listener.transformPoint("odom", position, position);
+
+        }
+        
 
     }
 
@@ -306,7 +320,7 @@ private:
             publishMergedCloud(to_merge_cloud);
             sensor_msgs::PointCloud2 as_pointcloud_2;
             if (sensor_msgs::convertPointCloudToPointCloud2(to_merge_cloud, as_pointcloud_2)){
-                publishMergeClusters(as_pointcloud_2);
+                //publishMergeClusters(as_pointcloud_2);
             }else{
                 ROS_ERROR("ERROR WHEN GETTING PointCloud to PointCloud2 CONVERSION!");
             }
