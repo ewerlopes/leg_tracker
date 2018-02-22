@@ -1,10 +1,33 @@
+
+// Linear algebra
 #include <eigen3/Eigen/Dense>
 
+// ROS core headers
 #include <ros/ros.h>
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_listener.h>
 #include <laser_geometry/laser_geometry.h>
 #include <laser_assembler/AssembleScans.h>
+#include <sensor_msgs/point_cloud_conversion.h>
+
+// PCL specific includes
+#include <boost/lexical_cast.hpp>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/kdtree/kdtree.h>
+#include <pcl/point_types.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/extract_clusters.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/point_types.h>
+#include <pcl/PCLPointCloud2.h>
+#include <pcl/conversions.h>
+#include <pcl_ros/transforms.h>
 
 // ROS messages
 #include <geometry_msgs/PoseStamped.h>
@@ -12,6 +35,7 @@
 #include <nav_msgs/Odometry.h>
 #include <sensor_msgs/LaserScan.h>
 #include <sensor_msgs/PointCloud.h>
+#include <sensor_msgs/PointCloud2.h>
 
 // basic file operations
 #include <iostream>
@@ -42,6 +66,7 @@ public:
         scan_sub_ = nh_.subscribe("/scan", 1, &MotionDetector::laserCallback, this);
         merged_cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("merged_cloud", 10);
         cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("laser_cloud", 10);
+        merged_cloud_cluster_pub = nh_.advertise<sensor_msgs::PointCloud2>("merged_clusters", 10);
 
         ros::service::waitForService("assemble_scans");
         client = nh_.serviceClient<laser_assembler::AssembleScans>("assemble_scans");
@@ -62,6 +87,7 @@ public:
         scan_sub_ = nh_.subscribe("/scan", 1, &MotionDetector::laserCallback, this);
         merged_cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("merged_cloud", 10);
         cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("laser_cloud", 10);
+        merged_cloud_cluster_pub = nh_.advertise<sensor_msgs::PointCloud2>("merged_clusters", 10);
 
         ros::service::waitForService("assemble_scans");
         client = nh_.serviceClient<laser_assembler::AssembleScans>("assemble_scans");
@@ -91,16 +117,19 @@ private:
     // PoseStamped robot_pose;     // q_t
     // pts_in_odom;
 
-    laser_geometry::LaserProjection projector_;
 
     ros::NodeHandle nh_;
+    
     ros::Subscriber scan_sub_;
-    ros::Publisher cloud_pub;
-    ros::Publisher merged_cloud_pub;
-    tf::TransformListener tf_listener;
 
-    laser_assembler::AssembleScans srv;
+    ros::Publisher cloud_pub;                   // publishes laserScan as PointCloud
+    ros::Publisher merged_cloud_pub;            // publish merged (across time) cloud
+    ros::Publisher merged_cloud_cluster_pub;    // publish cluster clouds inside the merged one.
+
     ros::ServiceClient client;
+    laser_assembler::AssembleScans srv;
+    laser_geometry::LaserProjection projector_;
+    tf::TransformListener tf_listener;
 
     /**
     * @brief gets the pointcloud from laserScan
@@ -117,6 +146,10 @@ private:
         }else{
             ROS_ERROR("Failed to publish merged cloud!");
         }
+    }
+
+    void publishMergedCloud(sensor_msgs::PointCloud cloud){
+        merged_cloud_pub.publish(cloud);
     }
 
     int mergeCloud(ros::Time from, ros::Time to, sensor_msgs::PointCloud &cloud){
@@ -157,6 +190,52 @@ private:
         }
     }
 
+    void publishMergeClusters(sensor_msgs::PointCloud2 &input){
+        pcl::PCLPointCloud2 to_convert;
+        
+        // Change from type sensor_msgs::PointCloud2 to pcl::PointXYZ
+        pcl_conversions::toPCL(input, to_convert);
+
+        pcl::PointCloud<pcl::PointXYZ>::Ptr converted(new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::fromPCLPointCloud2(to_convert,*converted);
+
+        // Creating the KdTree object for the search method of the extraction
+        pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+        tree->setInputCloud(converted);
+
+        std::vector<pcl::PointIndices> cluster_indices;
+        pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+        ec.setClusterTolerance(0.05); // 5cm
+        ec.setMinClusterSize(100);
+        ec.setMaxClusterSize(25000);
+        ec.setSearchMethod(tree);
+        ec.setInputCloud(converted);
+        ec.extract(cluster_indices);
+
+        for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end(); ++it) {
+            
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZ>);
+            for (std::vector<int>::const_iterator pit = it->indices.begin();
+            pit != it->indices.end(); pit++)
+            cloud_cluster->points.push_back(converted->points[*pit]); //*
+            
+            cloud_cluster->width = cloud_cluster->points.size();
+            cloud_cluster->height = 1;
+            cloud_cluster->is_dense = true;
+
+            // std::cout << "PointCloud representing the Cluster: " <<
+            // cloud_cluster->points.size () << " data points." << std::endl;
+
+            // Convert the pointcloud to be used in ROS
+            sensor_msgs::PointCloud2::Ptr output(new sensor_msgs::PointCloud2);
+            pcl::toROSMsg(*cloud_cluster, *output);
+            output->header.frame_id = input.header.frame_id;
+
+            // Publish the data
+            merged_cloud_cluster_pub.publish(output);
+        }
+    }
+
     /**
     * @brief callback for laser scan message
     */
@@ -191,14 +270,25 @@ private:
         // set time dimension
         setTemporal(cloud, (scan_msg->header.stamp.toSec() - start_time.toSec()));
         
-        //publishMergedCloud(start_time, ros::Time::now());
-        publishMergedCloud(ros::Time(0.0), ros::Time::now());
-        
         // save to file
         saveCloudDataToLog(cloud);
 
         // publish point cloud
         cloud_pub.publish(cloud);
+
+        //publishMergedCloud(start_time, ros::Time::now());
+        //publishMergedCloud(ros::Time(0.0), ros::Time::now());
+        sensor_msgs::PointCloud to_merge_cloud;
+        if (mergeCloud(ros::Time(0.0), ros::Time::now(), to_merge_cloud)){
+            sensor_msgs::PointCloud2 as_pointcloud_2;
+            if (sensor_msgs::convertPointCloudToPointCloud2(to_merge_cloud, as_pointcloud_2)){
+                publishMergeClusters(as_pointcloud_2);
+            }else{
+                ROS_ERROR("ERROR WHEN GETTING PointCloud to PointCloud2 CONVERSION!");
+            }
+        }else{
+            ROS_ERROR("ERROR WHEN MERGING CLOUD!");
+        }
 
     }
 

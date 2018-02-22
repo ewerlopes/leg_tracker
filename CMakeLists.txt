@@ -180,6 +180,7 @@ target_link_libraries(
   motion_detector 
   ${catkin_LIBRARIES}
   ${Eigen3_LIBRARIES}
+  ${PCL_LIBRARIES}
 )
 
 add_executable(

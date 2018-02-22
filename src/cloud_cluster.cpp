@@ -25,7 +25,7 @@
 // ros::Publisher pub;
 std::vector<ros::Publisher> pub_vec;
 sensor_msgs::PointCloud2::Ptr downsampled, output;
-// pcl::PointCloud<pcl::PointXYZ>::Ptr output_p, downsampled_XYZ;
+// pcl::PointCloud<pcl::PointXYZ>::Ptr output_p, converted;
 
 /*
 Example of pcl usage where we try to use clustering to detect objects
@@ -47,28 +47,25 @@ topics
 */
 
 void cloud_cb(const sensor_msgs::PointCloud2ConstPtr &input) {
-  // sensor_msgs::PointCloud2 cloud_filtered;
   pcl::PCLPointCloud2 to_convert;
-  // pcl::PointCloud<pcl::PointXYZ>::Ptr output_p(new pcl::PointCloud<pcl::PointXYZ>);
-  // pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_f(new pcl::PointCloud<pcl::PointXYZ>);
   
   // Change from type sensor_msgs::PointCloud2 to pcl::PointXYZ
   pcl_conversions::toPCL(*input, to_convert);
 
-  pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_XYZ(new pcl::PointCloud<pcl::PointXYZ>);
-  pcl::fromPCLPointCloud2(to_convert,*downsampled_XYZ);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr converted(new pcl::PointCloud<pcl::PointXYZ>);
+  pcl::fromPCLPointCloud2(to_convert,*converted);
 
   // Creating the KdTree object for the search method of the extraction
   pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
-  tree->setInputCloud(downsampled_XYZ);
+  tree->setInputCloud(converted);
 
   std::vector<pcl::PointIndices> cluster_indices;
   pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-  ec.setClusterTolerance(0.02); // 2cm
+  ec.setClusterTolerance(0.05); // 5cm
   ec.setMinClusterSize(100);
   ec.setMaxClusterSize(25000);
   ec.setSearchMethod(tree);
-  ec.setInputCloud(downsampled_XYZ);
+  ec.setInputCloud(converted);
   ec.extract(cluster_indices);
 
   ros::NodeHandle nh;
@@ -88,7 +85,7 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr &input) {
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZ>);
     for (std::vector<int>::const_iterator pit = it->indices.begin();
     pit != it->indices.end(); pit++)
-      cloud_cluster->points.push_back(downsampled_XYZ->points[*pit]); //*
+      cloud_cluster->points.push_back(converted->points[*pit]); //*
     
     cloud_cluster->width = cloud_cluster->points.size();
     cloud_cluster->height = 1;
@@ -117,10 +114,5 @@ int main(int argc, char **argv) {
   // Create a ROS subscriber for the input point cloud
   ros::Subscriber sub = nh.subscribe("/cloud_pcd", 1, cloud_cb);
 
-  // Create a ROS publisher for the output point cloud
-  // pub = nh.advertise<sensor_msgs::PointCloud2> ("/pcl_tut/object_cluster",
-  // 1);
-
-  // Spin
   ros::spin();
 }
