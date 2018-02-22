@@ -34,6 +34,7 @@
 
 // ROS messages
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/Point32.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/Odometry.h>
 #include <sensor_msgs/LaserScan.h>
@@ -43,6 +44,9 @@
 // basic file operations
 #include <iostream>
 #include <fstream>
+
+// Buffer
+#include <boost/circular_buffer.hpp>
 
 /**
 * @basic The motion detector algorithm in Shen, Xiaotong, Seong-Woo Kim, and
@@ -63,7 +67,8 @@ public:
     * @param log_filename the name of the file to save log data
     */
     MotionDetector(ros::NodeHandle nh, std::string scan_topic, float window_duration, std::string log_filename)
-        : nh_(nh), scan_topic_(scan_topic), window_duration_(window_duration), on_window(false) {
+        : nh_(nh), scan_topic_(scan_topic), window_duration_(window_duration), on_window(false),
+        window(window_duration*10){
         ros::NodeHandle nh_private("~");
         
         base_frame_ = "odom";
@@ -89,7 +94,8 @@ public:
     * @param window_duration the slide windows duration in seconds
     */
     MotionDetector(ros::NodeHandle nh, std::string scan_topic, float window_duration)
-        : nh_(nh), scan_topic_(scan_topic), window_duration_(window_duration), on_window(false) {
+        : nh_(nh), scan_topic_(scan_topic), window_duration_(window_duration), on_window(false),
+        window(window_duration*10){
         ros::NodeHandle nh_private("~");
         
         base_frame_ = "odom";
@@ -124,13 +130,6 @@ private:
     ros::Duration window_duration_;// delta_t
     ros::Time start_time;          // t_s
 
-    // static_pts_set;             // S_t
-    // movint_pts_set;             // M_t
-    // partition_prob_measure;     // P_t
-    // PoseStamped robot_pose;     // q_t
-    // pts_in_odom;
-
-
     ros::NodeHandle nh_;
     
     ros::Subscriber scan_sub_;
@@ -145,6 +144,8 @@ private:
     laser_assembler::AssembleScans srv;
     laser_geometry::LaserProjection projector_;
     tf::TransformListener tf_listener;
+
+    boost::circular_buffer<geometry_msgs::Point32> window; //10 is the laser frequency
 
     /**
     * @brief gets the pointcloud from laserScan
@@ -206,21 +207,55 @@ private:
     }
 
     void legClusterCallback(const player_tracker::LegArray::ConstPtr &leg_clusters_msg){
-        ROS_INFO("Cluster frame_id: %s", leg_clusters_msg->header.frame_id.c_str());
         for (int i=0; i < leg_clusters_msg->legs.size(); i++){
             sensor_msgs::PointCloud cloud;
             cloud.header = leg_clusters_msg->header;
             cloud.points = leg_clusters_msg->legs[i].points;
+
+            try{
+                tf_listener.waitForTransform("base_link", "odom", ros::Time(0.0), ros::Duration(0.1));
+            }catch (std::exception ex){
+                ROS_ERROR("%s",ex.what());
+                return;
+            }
             tf_listener.transformPointCloud("odom", cloud, cloud);
+            setTemporal(cloud, (ros::Time::now().toSec() - start_time.toSec()));
             leg_cloud_pub.publish(cloud);
 
-        //     for (int p=0; p < leg_clusters_msg->legs[i].points.size(); p++){
-        //         tf::Stamped<tf::Point> position((*cluster)->getPosition(), leg, scan->header.frame_id);
-        //         tf::Point position(leg_clusters_msg->legs[i].points[p].x, leg_clusters_msg->legs[i].points[p].y, leg_clusters_msg->legs[i].points[p].z); 
-        //         tf_listener.transformPoint("odom", position, position);
-
         }
-        
+    }
+
+    geometry_msgs::Point32 getClusterMean(sensor_msgs::PointCloud2 &input){
+        sensor_msgs::PointCloud cloud;
+        if (sensor_msgs::convertPointCloud2ToPointCloud(input, cloud)){
+            geometry_msgs::Point32 sum;
+            float factor = (float) 1/cloud.points.size();
+            for (int i=0; i < cloud.points.size(); i++){
+                sum.x += cloud.points[i].x * factor;
+                sum.y += cloud.points[i].y * factor;
+                sum.z += cloud.points[i].z * factor;
+            }
+            return sum;
+        }else{
+            ROS_ERROR("ERROR WHEN GETTING PointCloud2 to PointCloud CONVERSION!");
+        }
+    }
+
+    Eigen::MatrixXd getClusterVariance(sensor_msgs::PointCloud2 &input){
+        sensor_msgs::PointCloud cloud;
+        if (sensor_msgs::convertPointCloud2ToPointCloud(input, cloud)){
+            Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> point_matrix(3,cloud.points.size());
+            for (int i=0; i < cloud.points.size(); i++){
+                point_matrix.col(i) << cloud.points[i].x, cloud.points[i].y, cloud.points[i].z;
+            }
+
+            Eigen::MatrixXd centered = point_matrix.colwise() - point_matrix.rowwise().mean();
+            Eigen::MatrixXd cov = (centered * centered.transpose()) / double(point_matrix.cols() - 1);
+
+            return cov;
+        }else{
+            ROS_ERROR("ERROR WHEN GETTING PointCloud2 to PointCloud CONVERSION!");
+        }
 
     }
 
@@ -267,11 +302,27 @@ private:
 
             // Publish the data
             merged_cloud_cluster_pub.publish(output);
+
+            // get cluster mean
+            //geometry_msgs::Point32 mean = getClusterMean(*output);
+            //ROS_INFO("Mean of cluster %d: (%f,%f,%f)",count,mean.x,mean.y,mean.z);
+
+            // get cluster variance
+            Eigen::MatrixXd cov = getClusterVariance(*output);
+            ROS_INFO("COV of cluster %d", count);
+            Eigen::VectorXcd eigenvals = cov.eigenvalues();
+            Eigen::EigenSolver<Eigen::MatrixXd> es(cov);
+            Eigen::MatrixXd eigenvecs = es.eigenvectors().real();
+
+            ROS_INFO_STREAM(eigenvecs);
+
             count++;
         }
 
         ROS_WARN("Number of clusters: %d", count);
     }
+
+
 
     /**
     * @brief callback for laser scan message
@@ -320,7 +371,7 @@ private:
             publishMergedCloud(to_merge_cloud);
             sensor_msgs::PointCloud2 as_pointcloud_2;
             if (sensor_msgs::convertPointCloudToPointCloud2(to_merge_cloud, as_pointcloud_2)){
-                //publishMergeClusters(as_pointcloud_2);
+                publishMergeClusters(as_pointcloud_2);
             }else{
                 ROS_ERROR("ERROR WHEN GETTING PointCloud to PointCloud2 CONVERSION!");
             }
@@ -341,7 +392,7 @@ int main(int argc, char **argv) {
     nh.param("scan_topic", scan_topic, std::string("scan"));
     //MotionDetector md(nh, scan_topic, 1, "/home/airlab/Scrivania/log_file.txt");
 
-    MotionDetector md(nh, scan_topic, 1.5);
+    MotionDetector md(nh, scan_topic, 1);
 
     ros::spin();
     return 0;
