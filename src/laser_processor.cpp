@@ -84,7 +84,7 @@ tf::Point SampleSet::getPosition()
 sensor_msgs::PointCloud SampleSet::getSamplesAsPointCloud(){
 
     sensor_msgs::PointCloud cloud; // NOTE: frame_id is_not set.
-
+    #pragma omp parallel for
     for (iterator i = begin(); i != end(); ++i){
         geometry_msgs::Point32 point;
         point.x = (*i)->x;
