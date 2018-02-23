@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(player_tracker)
 
-set(CMAKE_CXX_FLAGS "-std=c++11 -g")
 find_package(Boost REQUIRED system thread)
 include_directories(${Boost_INCLUDE_DIRS})
 link_directories(${Boost_LIBRARY_DIRS})
@@ -15,6 +14,18 @@ find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 link_directories(${OpenCV_LIBRARY_DIRS})
 add_definitions(${OpenCV_DEFINITIONS})
+
+
+#########################################################
+# FIND OpenMP
+#########################################################
+find_package(OpenMP)
+if(OPENMP_FOUND)
+    set(CMAKE_CXX_FLAGS “${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}”)
+    set(CMAKE_C_FLAGS “${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}”)
+else(OPENMP_FOUND)
+    message (STATUS “OpenMP not found”)
+endif(OPENMP_FOUND)
 
 #########################################################
 # FIND PCL
@@ -43,6 +54,7 @@ endif(NOT Eigen3_FOUND)
 # include_directories(${OCTOMAP_INCLUDE_DIRS})
 # link_libraries(${PROJECT_NAME} ${OCTOMAP_LIBRARIES})
 
+set(CMAKE_CXX_FLAGS "-std=c++11 -g")
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp

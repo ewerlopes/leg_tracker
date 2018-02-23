@@ -33,7 +33,7 @@
     <param name="fixed_frame" type="string" value="odom" />
   </node>
 
-  <node pkg="player_tracker" type="motion_detector" name="motion_detector" output="screen"  required="true"/> <!--launch-prefix="xterm -e gdb args" -->
+  <node pkg="player_tracker" type="motion_detector" name="motion_detector" output="screen"  required="true" /> <!-- launch-prefix="xterm -e gdb args"/> -->
   
     <!-- run rviz -->
     <node pkg="rviz" type="rviz" name="rviz" />

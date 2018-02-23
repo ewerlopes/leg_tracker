@@ -2,6 +2,9 @@
 // Linear algebra
 #include <eigen3/Eigen/Dense>
 
+// Optmization
+#include <omp.h>
+
 // ROS core headers
 #include <ros/ros.h>
 #include <tf/transform_broadcaster.h>
@@ -209,6 +212,8 @@ private:
         m.color.g = 0;
         m.color.b = 0;
         m.lifetime = ros::Duration(0.1);
+
+        #pragma omp critical
         markers_pub.publish(m);
     }
 
@@ -243,7 +248,6 @@ private:
 
     void saveCloudDataToLog(sensor_msgs::PointCloud &cloud){
         if (log_file.is_open()){
-            #pragma omp parallel for    
             for (int i=0; i < cloud.points.size(); i++){
                 log_file << cloud.points[i].x << "," << cloud.points[i].y << "," << cloud.points[i].z << std::endl;
             }
@@ -260,13 +264,12 @@ private:
             try{
                 tf_listener.waitForTransform("base_link", "odom", ros::Time(0.0), ros::Duration(0.1));
                 tf_listener.transformPointCloud("odom", cloud, cloud);
+                setTemporal(cloud, (ros::Time::now().toSec() - start_time.toSec()));
+                #pragma omp critical
+                leg_cloud_pub.publish(cloud);
             }catch (std::exception ex){
                 ROS_ERROR("%s",ex.what());
-                return;
             }
-            setTemporal(cloud, (ros::Time::now().toSec() - start_time.toSec()));
-            leg_cloud_pub.publish(cloud);
-
         }
     }
 
@@ -286,10 +289,34 @@ private:
         }
     }
 
+    Eigen::MatrixXd getProjection(Eigen::MatrixXd &dataset, Eigen::VectorXd &eigenvect){
+        return eigenvect.transpose() * dataset;
+    }
+
+    void getCloudPointsAsMatrix(sensor_msgs::PointCloud2 &input, Eigen::MatrixXd &output){
+        sensor_msgs::PointCloud cloud;
+        if (sensor_msgs::convertPointCloud2ToPointCloud(input, cloud)){
+            #pragma omp parallel for
+            for (int i=0; i < cloud.points.size(); i++){
+                output.col(i) << cloud.points[i].x, cloud.points[i].y, cloud.points[i].z;
+            }
+        }else{
+            ROS_ERROR("ERROR WHEN GETTING PointCloud2 to PointCloud CONVERSION!");
+        }
+    }
+
+
+    Eigen::MatrixXd getClusterVariance(Eigen::MatrixXd &input){
+        Eigen::MatrixXd centered = input.colwise() - input.rowwise().mean();
+        Eigen::MatrixXd cov = (centered * centered.transpose()) / double(input.cols() - 1);
+        return cov;
+    }
+
+
     Eigen::MatrixXd getClusterVariance(sensor_msgs::PointCloud2 &input){
         sensor_msgs::PointCloud cloud;
         if (sensor_msgs::convertPointCloud2ToPointCloud(input, cloud)){
-            Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> point_matrix(3,cloud.points.size());
+            Eigen::MatrixXd point_matrix(3,cloud.points.size());
             #pragma omp parallel for
             for (int i=0; i < cloud.points.size(); i++){
                 point_matrix.col(i) << cloud.points[i].x, cloud.points[i].y, cloud.points[i].z;
@@ -336,10 +363,10 @@ private:
         for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end(); ++it) {
             
             pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZ>);
-            for (std::vector<int>::const_iterator pit = it->indices.begin();
-            pit != it->indices.end(); pit++)
-            cloud_cluster->points.push_back(converted->points[*pit]); //*
-            
+            for (std::vector<int>::const_iterator pit = it->indices.begin(); pit != it->indices.end(); pit++) {
+                cloud_cluster->points.push_back(converted->points[*pit]); //*
+            }
+                
             cloud_cluster->width = cloud_cluster->points.size();
             cloud_cluster->height = 1;
             cloud_cluster->is_dense = true;
@@ -350,12 +377,35 @@ private:
             output->header.frame_id = input.header.frame_id;
 
             // store cluster
+            #pragma omp critical
             clusters.push_back(*output);
             count++;
         }
 
         ROS_WARN("Number of clusters: %d", count);
         return clusters;
+    }
+
+    Eigen::VectorXd getCLusterSmallestEigenValue(Eigen::MatrixXd cov){
+        Eigen::VectorXd eigenvals = cov.eigenvalues().real();
+        Eigen::EigenSolver<Eigen::MatrixXd> es(cov);
+        Eigen::MatrixXd eigenvecs = es.eigenvectors().real();
+
+        Eigen::MatrixXd::Index minIndex;
+        double minVal = eigenvals.col(0).minCoeff(&minIndex);
+
+        ROS_INFO_STREAM("EIGENVALUES:\n " << eigenvals);
+        ROS_INFO_STREAM("minVal: " << minVal << "\tminIndex: " << minIndex);
+        return eigenvecs.col(minIndex);
+    }
+
+    Eigen::MatrixXd::Index getSteepestVector(Eigen::MatrixXd eigenvectors){
+        Eigen::MatrixXd A = eigenvectors.topRows(2);
+        Eigen::VectorXd B = A.colwise().squaredNorm();
+        Eigen::MatrixXd::Index minIndex;
+        ROS_INFO_STREAM(B.rows() << " " << B.cols());
+        B.minCoeff(&minIndex);
+        return minIndex;
     }
 
     Eigen::VectorXd getCLusterSmallestEigenValue(sensor_msgs::PointCloud2 &cluster){
@@ -434,15 +484,33 @@ private:
             sensor_msgs::PointCloud2 as_pointcloud_2;
             
             if (sensor_msgs::convertPointCloudToPointCloud2(to_merge_cloud, as_pointcloud_2)){
+
+                Eigen::MatrixXd asMatrix(3, to_merge_cloud.points.size());       //Contains to_merge_cloud as matrix.
+                getCloudPointsAsMatrix(as_pointcloud_2,asMatrix);
+
                 std::vector<sensor_msgs::PointCloud2> clusters = getClusters(as_pointcloud_2);
+                if (clusters.empty()) {
+                    return;
+                }
+
+                Eigen::MatrixXd eigenvects(3,clusters.size());      // Holds all eigenvectors;
+
                 #pragma omp parallel for
                 for(int i=0; i < clusters.size(); i++){
                     ROS_INFO("Processing cluster %d", i);
-                    Eigen::VectorXd eigenvect= getCLusterSmallestEigenValue(clusters[i]);
+                    Eigen::VectorXd eigenvect = getCLusterSmallestEigenValue(clusters[i]);
+                    eigenvects.col(i) << eigenvect(0), eigenvect(1), eigenvect(2);     
+                    #pragma omp critical
                     merged_cloud_cluster_pub.publish(clusters[i]);
                     geometry_msgs::Point32 mean = getClusterMean(clusters[i]);
                     publishEigenMarker(to_merge_cloud.header, eigenvect, i, mean);
                 }
+
+
+            Eigen::MatrixXd::Index steepest_eigenvect = getSteepestVector(eigenvects);
+            Eigen::VectorXd a = eigenvects.col(steepest_eigenvect);
+            Eigen::MatrixXd projected = getProjection(asMatrix, a);
+
             }else{
                 ROS_ERROR("ERROR WHEN GETTING PointCloud to PointCloud2 CONVERSION!");
             }
