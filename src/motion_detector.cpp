@@ -40,6 +40,7 @@
 #include <sensor_msgs/LaserScan.h>
 #include <sensor_msgs/PointCloud.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <std_msgs/Header.h>
 
 // basic file operations
 #include <iostream>
@@ -47,6 +48,9 @@
 
 // Buffer
 #include <boost/circular_buffer.hpp>
+
+// Markers
+#include <visualization_msgs/Marker.h>
 
 /**
 * @basic The motion detector algorithm in Shen, Xiaotong, Seong-Woo Kim, and
@@ -76,10 +80,12 @@ public:
         scan_sub_ = nh_.subscribe("/scan", 1, &MotionDetector::laserCallback, this);
         leg_cluster_sub = nh_.subscribe("detected_leg_clusters", 1, &MotionDetector::legClusterCallback, this);
         
+
         merged_cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("merged_cloud", 10);
         cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("laser_cloud", 10);
         merged_cloud_cluster_pub = nh_.advertise<sensor_msgs::PointCloud2>("merged_clusters", 10);
         leg_cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("leg_cloud", 10);
+        markers_pub = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 20);
 
         ros::service::waitForService("assemble_scans");
         client = nh_.serviceClient<laser_assembler::AssembleScans>("assemble_scans");
@@ -107,6 +113,7 @@ public:
         cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("laser_cloud", 10);
         merged_cloud_cluster_pub = nh_.advertise<sensor_msgs::PointCloud2>("merged_clusters", 10);
         leg_cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("leg_cloud", 10);
+        markers_pub = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 20);
 
         ros::service::waitForService("assemble_scans");
         client = nh_.serviceClient<laser_assembler::AssembleScans>("assemble_scans");
@@ -139,6 +146,7 @@ private:
     ros::Publisher merged_cloud_pub;            // publish merged (across time) cloud
     ros::Publisher merged_cloud_cluster_pub;    // publish cluster clouds inside the merged one.
     ros::Publisher leg_cloud_pub;
+    ros::Publisher markers_pub;
 
     ros::ServiceClient client;
     laser_assembler::AssembleScans srv;
@@ -157,7 +165,7 @@ private:
     void publishMergedCloud(ros::Time from, ros::Time to){
         sensor_msgs::PointCloud cloud;
 
-        if (mergeCloud(from, to, cloud)){
+        if (mergeWindowClouds(from, to, cloud)){
             merged_cloud_pub.publish(cloud);
         }else{
             ROS_ERROR("Failed to publish merged cloud!");
@@ -168,7 +176,43 @@ private:
         merged_cloud_pub.publish(cloud);
     }
 
-    int mergeCloud(ros::Time from, ros::Time to, sensor_msgs::PointCloud &cloud){
+    void publishEigenMarker(std_msgs::Header header, Eigen::VectorXd eigenvect, int marker_id, geometry_msgs::Point32 mean){
+        // Publish marker to rviz
+        visualization_msgs::Marker m;
+        m.header.stamp = header.stamp;
+        m.header.frame_id = header.frame_id;
+        m.ns = "Eigen";
+        m.id = marker_id;
+        m.type = m.ARROW;
+        geometry_msgs::Point new_mean;
+        new_mean.x = mean.x;
+        new_mean.y = mean.y;
+        new_mean.z = mean.z;
+        m.points.push_back(new_mean);
+
+        if (eigenvect(2) > 0)
+            eigenvect = eigenvect * -1;
+
+        geometry_msgs::Point eigen_point;
+        eigen_point.x = eigenvect(0) + new_mean.x;
+        eigen_point.y = eigenvect(1) + new_mean.y;
+        eigen_point.z = eigenvect(2) + new_mean.z;
+        m.points.push_back(eigen_point);
+        //m.pose.position.x = eigenvect(0);
+        //m.pose.position.y = eigenvect(1);
+        //m.pose.position.z = eigenvect(2);
+        m.scale.x = 0.05;
+        m.scale.y = 0.05;
+        m.scale.z = 0.05;
+        m.color.a = 1;
+        m.color.r = 1;
+        m.color.g = 0;
+        m.color.b = 0;
+        m.lifetime = ros::Duration(0.1);
+        markers_pub.publish(m);
+    }
+
+    int mergeWindowClouds(ros::Time from, ros::Time to, sensor_msgs::PointCloud &cloud){
         srv.request.begin = from;
         srv.request.end   = to;
         
@@ -207,6 +251,7 @@ private:
     }
 
     void legClusterCallback(const player_tracker::LegArray::ConstPtr &leg_clusters_msg){
+        #pragma omp parallel for
         for (int i=0; i < leg_clusters_msg->legs.size(); i++){
             sensor_msgs::PointCloud cloud;
             cloud.header = leg_clusters_msg->header;
@@ -214,11 +259,11 @@ private:
 
             try{
                 tf_listener.waitForTransform("base_link", "odom", ros::Time(0.0), ros::Duration(0.1));
+                tf_listener.transformPointCloud("odom", cloud, cloud);
             }catch (std::exception ex){
                 ROS_ERROR("%s",ex.what());
                 return;
             }
-            tf_listener.transformPointCloud("odom", cloud, cloud);
             setTemporal(cloud, (ros::Time::now().toSec() - start_time.toSec()));
             leg_cloud_pub.publish(cloud);
 
@@ -245,6 +290,7 @@ private:
         sensor_msgs::PointCloud cloud;
         if (sensor_msgs::convertPointCloud2ToPointCloud(input, cloud)){
             Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> point_matrix(3,cloud.points.size());
+            #pragma omp parallel for
             for (int i=0; i < cloud.points.size(); i++){
                 point_matrix.col(i) << cloud.points[i].x, cloud.points[i].y, cloud.points[i].z;
             }
@@ -259,7 +305,10 @@ private:
 
     }
 
-    void publishMergeClusters(sensor_msgs::PointCloud2 &input){
+    std::vector<sensor_msgs::PointCloud2> getClusters(sensor_msgs::PointCloud2 &input){
+
+        std::vector<sensor_msgs::PointCloud2> clusters;
+
         pcl::PCLPointCloud2 to_convert;
         
         // Change from type sensor_msgs::PointCloud2 to pcl::PointXYZ
@@ -300,29 +349,31 @@ private:
             pcl::toROSMsg(*cloud_cluster, *output);
             output->header.frame_id = input.header.frame_id;
 
-            // Publish the data
-            merged_cloud_cluster_pub.publish(output);
-
-            // get cluster mean
-            //geometry_msgs::Point32 mean = getClusterMean(*output);
-            //ROS_INFO("Mean of cluster %d: (%f,%f,%f)",count,mean.x,mean.y,mean.z);
-
-            // get cluster variance
-            Eigen::MatrixXd cov = getClusterVariance(*output);
-            ROS_INFO("COV of cluster %d", count);
-            Eigen::VectorXcd eigenvals = cov.eigenvalues();
-            Eigen::EigenSolver<Eigen::MatrixXd> es(cov);
-            Eigen::MatrixXd eigenvecs = es.eigenvectors().real();
-
-            ROS_INFO_STREAM(eigenvecs);
-
+            // store cluster
+            clusters.push_back(*output);
             count++;
         }
 
         ROS_WARN("Number of clusters: %d", count);
+        return clusters;
     }
 
+    Eigen::VectorXd getCLusterSmallestEigenValue(sensor_msgs::PointCloud2 &cluster){
+        // get cluster variance
+        Eigen::MatrixXd cov = getClusterVariance(cluster);
+        Eigen::VectorXd eigenvals = cov.eigenvalues().real();
+        Eigen::EigenSolver<Eigen::MatrixXd> es(cov);
+        Eigen::MatrixXd eigenvecs = es.eigenvectors().real();
 
+
+        Eigen::MatrixXf::Index minIndex;
+        double minVal = eigenvals.col(0).minCoeff(&minIndex);
+
+
+        ROS_INFO_STREAM("EIGENVALUES:\n " << eigenvals);
+        ROS_INFO_STREAM("minVal: " << minVal << "\tminIndex: " << minIndex);
+        return eigenvecs.col(minIndex);
+    }
 
     /**
     * @brief callback for laser scan message
@@ -330,9 +381,14 @@ private:
     void laserCallback(const sensor_msgs::LaserScan::ConstPtr &scan_msg) {
 
         // check whether we can transform data
-        if (!tf_listener.waitForTransform(scan_msg->header.frame_id,
-            base_frame_, scan_msg->header.stamp + ros::Duration().fromSec(scan_msg->ranges.size() * 
-            scan_msg->time_increment), ros::Duration(1.0))) {
+        try{
+            if (!tf_listener.waitForTransform(scan_msg->header.frame_id,
+                base_frame_, scan_msg->header.stamp + ros::Duration().fromSec(scan_msg->ranges.size() * 
+                scan_msg->time_increment), ros::Duration(1.0))) {
+                return;
+            }
+        }catch (std::exception ex){
+            ROS_ERROR("%s",ex.what());
             return;
         }
 
@@ -367,14 +423,30 @@ private:
         //publishMergedCloud(start_time, ros::Time::now());
         //publishMergedCloud(ros::Time(0.0), ros::Time::now());
         sensor_msgs::PointCloud to_merge_cloud;
-        if (mergeCloud(start_time, ros::Time::now(), to_merge_cloud)){
+        if (mergeWindowClouds(start_time, ros::Time::now(), to_merge_cloud)){
+
+            if (!to_merge_cloud.points.size()){
+                ROS_WARN("Merged point cloud is empty. Skipping...");
+                return;
+            }
+
             publishMergedCloud(to_merge_cloud);
             sensor_msgs::PointCloud2 as_pointcloud_2;
+            
             if (sensor_msgs::convertPointCloudToPointCloud2(to_merge_cloud, as_pointcloud_2)){
-                publishMergeClusters(as_pointcloud_2);
+                std::vector<sensor_msgs::PointCloud2> clusters = getClusters(as_pointcloud_2);
+                #pragma omp parallel for
+                for(int i=0; i < clusters.size(); i++){
+                    ROS_INFO("Processing cluster %d", i);
+                    Eigen::VectorXd eigenvect= getCLusterSmallestEigenValue(clusters[i]);
+                    merged_cloud_cluster_pub.publish(clusters[i]);
+                    geometry_msgs::Point32 mean = getClusterMean(clusters[i]);
+                    publishEigenMarker(to_merge_cloud.header, eigenvect, i, mean);
+                }
             }else{
                 ROS_ERROR("ERROR WHEN GETTING PointCloud to PointCloud2 CONVERSION!");
             }
+        
         }else{
             ROS_ERROR("ERROR WHEN MERGING CLOUD!");
         }
