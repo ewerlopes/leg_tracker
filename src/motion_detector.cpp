@@ -403,7 +403,6 @@ private:
         Eigen::MatrixXd A = eigenvectors.topRows(2);
         Eigen::VectorXd B = A.colwise().squaredNorm();
         Eigen::MatrixXd::Index minIndex;
-        ROS_INFO_STREAM(B.rows() << " " << B.cols());
         B.minCoeff(&minIndex);
         return minIndex;
     }
@@ -425,10 +424,84 @@ private:
         return eigenvecs.col(minIndex);
     }
 
+
+    void saveProjectionToFile(Eigen::MatrixXd projected){
+        if (log_file.is_open()){
+            #pragma omp critical
+            for (int i=0; i < projected.cols(); i++){
+                log_file << projected(i) << ",";
+            }
+        }
+
+    }
+
+
+    void processWindows(const sensor_msgs::LaserScan::ConstPtr &scan_msg){
+
+        sensor_msgs::PointCloud to_merge_cloud;
+
+        if (mergeWindowClouds(start_time, ros::Time::now(), to_merge_cloud)){
+
+            if (!to_merge_cloud.points.size()){
+                ROS_WARN("Merged point cloud is empty. Skipping...");
+                return;
+            }
+
+            publishMergedCloud(to_merge_cloud);
+
+            sensor_msgs::PointCloud2 as_pointcloud_2;
+            
+            if (sensor_msgs::convertPointCloudToPointCloud2(to_merge_cloud, as_pointcloud_2)){
+
+                std::vector<sensor_msgs::PointCloud2> clusters = getClusters(as_pointcloud_2);
+                
+                if (clusters.empty()) {
+                    return;
+                }
+
+                Eigen::MatrixXd eigenvects(3, clusters.size());      // Holds all eigenvectors;
+
+                #pragma omp parallel for
+                for(int i=0; i < clusters.size(); i++){
+                    ROS_INFO("Processing cluster %d", i);
+                    Eigen::VectorXd eigenvect = getCLusterSmallestEigenValue(clusters[i]);
+                    eigenvects.col(i) << eigenvect(0), eigenvect(1), eigenvect(2);
+
+                    #pragma omp critical
+                    merged_cloud_cluster_pub.publish(clusters[i]);
+                    geometry_msgs::Point32 mean = getClusterMean(clusters[i]);
+                    publishEigenMarker(to_merge_cloud.header, eigenvect, i, mean);
+                }
+
+
+                Eigen::MatrixXd::Index steepest_eigenvect = getSteepestVector(eigenvects);
+                Eigen::VectorXd a = eigenvects.col(steepest_eigenvect);
+
+                // Save to file
+                for(int i=0; i < clusters.size(); i++){
+                    Eigen::MatrixXd asMatrix(3, clusters[i].width * clusters[i].height);       //Contains to_merge_cloud as matrix.
+                    getCloudPointsAsMatrix(clusters[i], asMatrix);
+                    Eigen::MatrixXd projected = getProjection(asMatrix, a);
+                    ROS_INFO_STREAM(asMatrix.cols() << " <?> " << projected.cols());
+                    if (projected.cols() != clusters[i].width * clusters[i].height){
+                        ROS_ERROR("NOT EQUAL");
+                    }
+                    saveProjectionToFile(projected);
+                }
+
+            }else{
+                ROS_ERROR("ERROR WHEN GETTING PointCloud to PointCloud2 CONVERSION!");
+            }
+        
+        }else{
+            ROS_ERROR("ERROR WHEN MERGING CLOUD!");
+        }
+    }
+
     /**
     * @brief callback for laser scan message
     */
-    void laserCallback(const sensor_msgs::LaserScan::ConstPtr &scan_msg) {
+    void laserCallback(const sensor_msgs::LaserScan::ConstPtr &scan_msg){
 
         // check whether we can transform data
         try{
@@ -455,70 +528,18 @@ private:
             ROS_INFO("Time: %f", (scan_msg->header.stamp.toSec() - start_time.toSec()));
             getPointCloud(scan_msg,cloud);
         }else{
-            ROS_WARN("Resetting...");
-            saveToLog("--");
+            ROS_WARN("End of windows... Processing");
+            processWindows(scan_msg);
+            saveToLog("\n--");
             on_window = false;
             return;
         }
 
         // set time dimension
         setTemporal(cloud, (scan_msg->header.stamp.toSec() - start_time.toSec()));
-        
-        // save to file
-        saveCloudDataToLog(cloud);
 
         // publish point cloud
         cloud_pub.publish(cloud);
-
-        //publishMergedCloud(start_time, ros::Time::now());
-        //publishMergedCloud(ros::Time(0.0), ros::Time::now());
-        sensor_msgs::PointCloud to_merge_cloud;
-        if (mergeWindowClouds(start_time, ros::Time::now(), to_merge_cloud)){
-
-            if (!to_merge_cloud.points.size()){
-                ROS_WARN("Merged point cloud is empty. Skipping...");
-                return;
-            }
-
-            publishMergedCloud(to_merge_cloud);
-            sensor_msgs::PointCloud2 as_pointcloud_2;
-            
-            if (sensor_msgs::convertPointCloudToPointCloud2(to_merge_cloud, as_pointcloud_2)){
-
-                Eigen::MatrixXd asMatrix(3, to_merge_cloud.points.size());       //Contains to_merge_cloud as matrix.
-                getCloudPointsAsMatrix(as_pointcloud_2,asMatrix);
-
-                std::vector<sensor_msgs::PointCloud2> clusters = getClusters(as_pointcloud_2);
-                if (clusters.empty()) {
-                    return;
-                }
-
-                Eigen::MatrixXd eigenvects(3,clusters.size());      // Holds all eigenvectors;
-
-                #pragma omp parallel for
-                for(int i=0; i < clusters.size(); i++){
-                    ROS_INFO("Processing cluster %d", i);
-                    Eigen::VectorXd eigenvect = getCLusterSmallestEigenValue(clusters[i]);
-                    eigenvects.col(i) << eigenvect(0), eigenvect(1), eigenvect(2);     
-                    #pragma omp critical
-                    merged_cloud_cluster_pub.publish(clusters[i]);
-                    geometry_msgs::Point32 mean = getClusterMean(clusters[i]);
-                    publishEigenMarker(to_merge_cloud.header, eigenvect, i, mean);
-                }
-
-
-            Eigen::MatrixXd::Index steepest_eigenvect = getSteepestVector(eigenvects);
-            Eigen::VectorXd a = eigenvects.col(steepest_eigenvect);
-            Eigen::MatrixXd projected = getProjection(asMatrix, a);
-
-            }else{
-                ROS_ERROR("ERROR WHEN GETTING PointCloud to PointCloud2 CONVERSION!");
-            }
-        
-        }else{
-            ROS_ERROR("ERROR WHEN MERGING CLOUD!");
-        }
-
     }
 
     void run() {}
@@ -530,9 +551,9 @@ int main(int argc, char **argv) {
     ros::NodeHandle nh;
     std::string scan_topic;
     nh.param("scan_topic", scan_topic, std::string("scan"));
-    //MotionDetector md(nh, scan_topic, 1, "/home/airlab/Scrivania/log_file.txt");
+    MotionDetector md(nh, scan_topic, 1, "/home/airlab/Scrivania/log_file.txt");
 
-    MotionDetector md(nh, scan_topic, 1);
+    //MotionDetector md(nh, scan_topic, 1);
 
     ros::spin();
     return 0;
