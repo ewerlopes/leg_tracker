@@ -425,11 +425,11 @@ private:
     }
 
 
-    void saveProjectionToFile(Eigen::MatrixXd projected){
+    void saveProjectionToFile(Eigen::MatrixXd projected, int id){
         if (log_file.is_open()){
             #pragma omp critical
             for (int i=0; i < projected.cols(); i++){
-                log_file << projected(i) << ",";
+                log_file << "(" << id << "," << projected(i) << ");";
             }
         }
 
@@ -486,7 +486,7 @@ private:
                     if (projected.cols() != clusters[i].width * clusters[i].height){
                         ROS_ERROR("NOT EQUAL");
                     }
-                    saveProjectionToFile(projected);
+                    saveProjectionToFile(projected, i);
                 }
 
             }else{
