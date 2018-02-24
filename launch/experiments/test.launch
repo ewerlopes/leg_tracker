@@ -10,11 +10,11 @@
     <!-- run detect_leg_clusters -->
     <node pkg="player_tracker" type="detect_leg_clusters" name="detect_leg_clusters" output="screen"/>
     
-    <!-- run joint_player_tracker -->
-    <node pkg="player_tracker" type="joint_leg_tracker.py" name="joint_leg_tracker" output="screen" />
+    <!-- run joint_player_tracker
+    <node pkg="player_tracker" type="joint_leg_tracker.py" name="joint_leg_tracker" output="screen" /> -->
 
     <!-- run joint_player_tracker -->
-    <!-- <node pkg="player_tracker" type="leg_distance.py" name="leg_distance" output="screen"/> --> 
+    <node pkg="player_tracker" type="leg_distance.py" name="leg_distance" output="screen"/> 
 
     <!-- run joint_player_tracker -->
     <node pkg="player_tracker" type="detector.py" name="detector" output="screen"/> 
@@ -36,6 +36,8 @@
   <!-- launch-prefix="xterm -e gdb args"/> -->
   
   <node pkg="player_tracker" type="motion_variance" name="motion_variance" output="screen"  required="true" />
+
+  <node pkg="player_tracker" type="blob_publisher" name="blob_publisher" output="screen"  required="true" />
 
   <!-- run rviz -->
   <node pkg="rviz" type="rviz" name="rviz" />

@@ -87,7 +87,7 @@ class ObjectTracked:
         return ObjectTracked.id
 
     def __init__(self, x, y, now, confidence, is_player, in_free_space):  
-        self.id_num = "Hyp: {}".format(ObjectTracked.getId())
+        self.id_num = ObjectTracked.getId()
         self.colour = (0,0,0)
         self.setIsPerson(is_player)
         self.last_seen = now
@@ -239,8 +239,8 @@ class Tracker:
         self.latest_scan_header_stamp_with_tf_available = rospy.get_rostime()
 
     	# ROS publishers
-        self.people_tracked_pub = rospy.Publisher('people_tracked', PersonArray, queue_size=300)
-        self.people_detected_pub = rospy.Publisher('people_detected', PersonArray, queue_size=300)
+        self.people_tracked_pub = rospy.Publisher('players_tracked', PersonArray, queue_size=300)
+        self.people_detected_pub = rospy.Publisher('players_detected', PersonArray, queue_size=300)
         self.marker_pub = rospy.Publisher('visualization_marker', Marker, queue_size=300)
         self.non_leg_clusters_pub = rospy.Publisher('non_leg_clusters', LegArray, queue_size=300)
         #self.laser_cloud_pub = rospy.Publisher('laser_cloud', PointCloud2, queue_size=1)
@@ -656,7 +656,8 @@ class Tracker:
                     new_person.pose.orientation.z = quaternion[2]
                     new_person.pose.orientation.w = quaternion[3] 
                     new_person.id = person.id_num 
-                    people_tracked_msg.people.append(new_person)
+                    new_person.speed = np.sqrt(person.vel_x**2 + person.vel_y**2)
+                    people_tracked_msg.people.append(copy.deepcopy(new_person))
 
                     # publish rviz markers       
                     # Cylinder for body 
@@ -759,8 +760,8 @@ class Tracker:
         self.prev_person_marker_id = marker_id          
 
         # Publish people tracked message
-        self.people_tracked_pub.publish(people_tracked_msg)   
-
+        self.people_tracked_pub.publish(people_tracked_msg)  
+        rospy.logwarn(people_tracked_msg.people)
         self.polar_grid.publish_fov(now)         
 
 if __name__ == '__main__':

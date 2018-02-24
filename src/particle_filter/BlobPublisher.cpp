@@ -47,7 +47,7 @@ void BlobPublisher::fovCallback(const visualization_msgs::Marker &fov)
         blobPub.publish(msg);
 
     } catch (tf::TransformException ex) {
-        ROS_ERROR("%s",ex.what());
+        ROS_WARN("%s",ex.what());
     }
 }
 

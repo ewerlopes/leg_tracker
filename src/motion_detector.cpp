@@ -201,7 +201,7 @@ Eigen::MatrixXd MotionDetector::getCloudPointsAsMatrix(sensor_msgs::PointCloud2 
 }
 
 Eigen::MatrixXd MotionDetector::getCloudPointsAsMatrix(sensor_msgs::PointCloud &cloud) {
-    Eigen::MatrixXd output;
+    Eigen::MatrixXd output(3, cloud.points.size());
     #pragma omp parallel for
     for (int i=0; i < cloud.points.size(); i++){
         output.col(i) << cloud.points[i].x, cloud.points[i].y, cloud.points[i].z;

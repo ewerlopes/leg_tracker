@@ -31,6 +31,10 @@ void MotionVariance::blobDetectionCallback(const player_tracker::Blob &msg)
     PointCloudList clouds(clusters.size());
     Eigen::VectorXd direction;
 
+    if (clusters.empty()) {
+        return;
+    }
+
     #pragma omp parallel sections
     {
         #pragma omp section
@@ -77,7 +81,7 @@ void MotionVariance::convertClouds(Cloud2List &clusters, PointCloudList &clouds)
 MinimalPointCloud MotionVariance::minimizeCloud(sensor_msgs::PointCloud &pc, Eigen::MatrixXd cloudMatrix, Eigen::MatrixXd &projection)
 {
     MinimalPointCloud minimizedCloud;
-    minimizedCloud.centroid = cloudMatrix.rowwise().mean();
+    minimizedCloud.centroid = cloudMatrix.rowwise().mean(); // this is just a col
     minimizedCloud.points = pc;
     Eigen::MatrixXd covariance = getClusterVariance(projection);
     minimizedCloud.variance = covariance(0);    // covariance of elements of 1 point is a single element!
@@ -89,18 +93,19 @@ float MotionVariance::computeDistance(MinimalPointCloud &cloud, const geometry_m
     Eigen::Vector2d vectorPose;
     vectorPose << pose.position.x, pose.position.y;
 
-    return (cloud.centroid - vectorPose).squaredNorm();
+    return (cloud.centroid.topRows(2) - vectorPose).squaredNorm();
 }
 
 
 void MotionVariance::publishVariance(MinimalPointCloud &minimalCloud)
 {
     player_tracker::TrackVariance msg;
+    msg.header.stamp = ros::Time::now();
     msg.variance = minimalCloud.variance;
     msg.centroid.x = minimalCloud.centroid.x();
     msg.centroid.y = minimalCloud.centroid.y();
+    msg.centroid.z = minimalCloud.centroid.z();
     msg.points = minimalCloud.points.points;
-    msg.centroid.z = 0.1;
 
     variance_pub_.publish(msg);
 }

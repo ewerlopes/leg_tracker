@@ -7,7 +7,7 @@
 
 typedef struct MinimalPointCloud {
     float variance;
-    Eigen::Vector2d centroid;
+    Eigen::VectorXd centroid;
     sensor_msgs::PointCloud points;
 } MinimalPointCloud;
 
