@@ -85,10 +85,10 @@ std::vector<geometry_msgs::Point32> SampleSet::getSamples(){
 
     std::vector<geometry_msgs::Point32> points;
     #pragma omp parallel for
-    for (iterator i = begin(); i != end(); ++i){
+    for (int i = 0; i < points.size(); i++){
         geometry_msgs::Point32 point;
-        point.x = (*i)->x;
-        point.y = (*i)->y;
+        point.x = points[i].x;
+        point.y = points[i].y;
         point.z = 0.0;
         points.push_back(point);
     }
@@ -96,7 +96,7 @@ std::vector<geometry_msgs::Point32> SampleSet::getSamples(){
     return points;
 }
 
-ScanProcessor::ScanProcessor(const sensor_msgs::LaserScan& scan) 
+ScanProcessor::ScanProcessor(const sensor_msgs::LaserScan& scan)
 {
   scan_ = scan;
 
@@ -128,8 +128,8 @@ void ScanProcessor::removeLessThan(uint32_t num)
     {
       delete (*c_iter);
       clusters_.erase(c_iter++);
-    } 
-    else 
+    }
+    else
     {
       ++c_iter;
     }
@@ -139,7 +139,7 @@ void ScanProcessor::removeLessThan(uint32_t num)
 
 void ScanProcessor::splitConnected(float thresh)
 {
-  // Holds our temporary list of split clusters 
+  // Holds our temporary list of split clusters
   // because we will be modifying our existing list in the mean time
   std::list<SampleSet*> tmp_clusters;
 
@@ -169,11 +169,11 @@ void ScanProcessor::splitConnected(float thresh)
           {
             sample_queue.push_back(*s_rest);
             (*c_iter)->erase(s_rest++);
-          } 
-          else 
+          }
+          else
           {
             ++s_rest;
-          }  
+          }
         }
         s_q++;
       }
@@ -197,4 +197,4 @@ void ScanProcessor::splitConnected(float thresh)
   // Insert our temporary clusters list back into the de facto list
   clusters_.insert(clusters_.begin(), tmp_clusters.begin(), tmp_clusters.end());
 }
-}; // namespace laser_processor 
+}; // namespace laser_processor

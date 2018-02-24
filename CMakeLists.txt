@@ -4,6 +4,7 @@ project(player_tracker)
 
 find_package(Boost REQUIRED system thread)
 include_directories(
+  include ${catkin_INCLUDE_DIRS}
   include
   ${catkin_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}
@@ -60,7 +61,7 @@ endif(NOT Eigen3_FOUND)
 # include_directories(${OCTOMAP_INCLUDE_DIRS})
 # link_libraries(${PROJECT_NAME} ${OCTOMAP_LIBRARIES})
 
-set(CMAKE_CXX_FLAGS "-std=c++11 -g")
+set(CMAKE_CXX_FLAGS "-std=c++11 -g -fopenmp")
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
@@ -196,7 +197,7 @@ target_link_libraries(
   particle_filter
   ${catkin_LIBRARIES}
   ${Eigen3_LIBRARIES}
-  # ${OpenMP_LIBS}
+  ${OpenMP_LIBS}
 )
 # target_compile_options(particle_filter PRIVATE ${OpenMP_FLAGS})
 # add_dependencies(particle_filter ${catkin_EXPORTED_TARGETS})
@@ -222,15 +223,16 @@ target_link_libraries(
 ##########################
 add_executable(
     motion_detector
+    src/motion_detector_node.cpp
     src/motion_detector.cpp
 )
 
 target_link_libraries(
   motion_detector
-  ${catkin_LIBRARIEparticle_filterS}
+  ${catkin_LIBRARIES}
   ${Eigen3_LIBRARIES}
   ${PCL_LIBRARIES}
-  # ${OpenMP_LIBS}
+  ${OpenMP_LIBS}
 )
 # target_compile_options(motion_detector PRIVATE ${OpenMP_FLAGS})
 # add_dependencies(motion_detector ${catkin_EXPORTED_TARGETS})
@@ -241,7 +243,9 @@ target_link_libraries(
 ##########################
 add_executable(
   motion_variance
+  src/motion_variance_node.cpp
   src/motion_variance.cpp
+  src/motion_detector.cpp
 )
 
 target_link_libraries(
@@ -249,10 +253,10 @@ target_link_libraries(
   ${catkin_LIBRARIES}
   ${Eigen3_LIBRARIES}
   ${PCL_LIBRARIES}
-  # ${OpenMP_LIBS}
+  ${OpenMP_LIBS}
 )
-# target_compile_options(motion_variance PRIVATE ${OpenMP_FLAGS})
-# add_dependencies(motion_variance ${catkin_EXPORTED_TARGETS})
+target_compile_options(motion_variance PRIVATE ${OpenMP_FLAGS})
+add_dependencies(motion_variance ${catkin_EXPORTED_TARGETS})
 
 ##########################
 # cloud_cluster

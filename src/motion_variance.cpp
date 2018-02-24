@@ -2,15 +2,14 @@
 
 MotionVariance::MotionVariance(ros::NodeHandle nh, std::string scan_topic, float window_duration, std::string log_filename)
 : MotionDetector(nh, scan_topic, window_duration, log_filename)
-{
-
-}
+{ /*    */ }
 
 MotionVariance::MotionVariance(ros::NodeHandle nh, std::string scan_topic, float window_duration):
 MotionDetector(nh, scan_topic,  window_duration)
-{
+{ /*    */ }
 
-}
+MotionVariance::~MotionVariance()
+{ /*    */ }
 
 void MotionVariance::initRosComunication()
 {
@@ -97,21 +96,4 @@ void MotionVariance::publishVariance(MinimalPointCloud &minimalCloud)
     msg.centroid.z = 0.1;
 
     variance_pub_.publish(msg);
-}
-
-#include <omp.h>
-
-int main(int argc, char **argv) {
-    omp_set_num_threads(OMP_THREADS);
-    ros::init(argc, argv, "motion_detection_algorithm");
-
-    ros::NodeHandle nh;
-    std::string scan_topic;
-    nh.param("scan_topic", scan_topic, std::string("scan"));
-    MotionVariance md(nh, scan_topic, 1, "/home/airlab/Scrivania/log_file.txt");
-
-    //MotionDetector md(nh, scan_topic, 1);
-
-    ros::spin();
-    return 0;
 }
