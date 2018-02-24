@@ -1,10 +1,17 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(player_tracker)
 
+
 find_package(Boost REQUIRED system thread)
-include_directories(${Boost_INCLUDE_DIRS})
+include_directories(
+  include
+  ${catkin_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIRS}
+)
+
 link_directories(${Boost_LIBRARY_DIRS})
 add_definitions(${Boost_DEFINITIONS})
+
 if(NOT Boost_FOUND)
     message(ERROR " Boost not found!")
 endif(NOT Boost_FOUND)
@@ -19,13 +26,12 @@ add_definitions(${OpenCV_DEFINITIONS})
 #########################################################
 # FIND OpenMP
 #########################################################
-find_package(OpenMP)
+find_package(OpenMP REQUIRED)
 if(OPENMP_FOUND)
-    set(CMAKE_CXX_FLAGS “${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}”)
-    set(CMAKE_C_FLAGS “${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}”)
-else(OPENMP_FOUND)
-    message (STATUS “OpenMP not found”)
-endif(OPENMP_FOUND)
+  message(STATUS "OPENMP FOUND")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}   ${OpenMP_C_FLAGS}")
+endif()
 
 #########################################################
 # FIND PCL
@@ -72,6 +78,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 add_message_files(
   FILES
+  TrackVariance.msg
   Blob.msg
   Person.msg
   PersonArray.msg
@@ -81,15 +88,20 @@ add_message_files(
   PersonEvidenceArray.msg
 )
 
-generate_messages(   
-  DEPENDENCIES  
-  std_msgs  
+generate_messages(
+  DEPENDENCIES
+  std_msgs
   geometry_msgs
-)  
+)
 
+# catkin_package(
+#   CATKIN_DEPENDS message_runtime
+# )
 
 catkin_package(
-  CATKIN_DEPENDS message_runtime
+  DEPENDS
+    OpenMP
+    message_runtime
 )
 
 
@@ -98,40 +110,50 @@ include_directories(
 	${catkin_INCLUDE_DIRS}
 )
 
+##########################
+# detect_leg_clusters
+##########################
 add_executable(
-  detect_leg_clusters 
+  detect_leg_clusters
   src/detect_leg_clusters.cpp
   src/laser_processor.cpp
   src/cluster_features.cpp
 )
 target_link_libraries(
-  detect_leg_clusters 
+  detect_leg_clusters
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
 )
 
-
+##########################
+# local_occupancy_grid_mapping
+##########################
 add_executable(
   local_occupancy_grid_mapping
   src/local_occupancy_grid_mapping.cpp
   src/laser_processor.cpp
 )
 target_link_libraries(
-  local_occupancy_grid_mapping 
+  local_occupancy_grid_mapping
   ${catkin_LIBRARIES}
 )
 
+##########################
+# test_local_occupancy_grid_mapping
+##########################
 add_executable(
   test_local_occupancy_grid_mapping
   src/test_local_occupancy_grid_mapping.cpp
   src/laser_processor.cpp
 )
 target_link_libraries(
-  test_local_occupancy_grid_mapping 
+  test_local_occupancy_grid_mapping
   ${catkin_LIBRARIES}
 )
 
-
+##########################
+# extract_positive_training_clusters
+##########################
 add_executable(
   extract_positive_training_clusters
   src/extract_positive_training_clusters.cpp
@@ -143,12 +165,14 @@ target_link_libraries(
   ${catkin_LIBRARIES}
 )
 
-
+##########################
+# train_leg_detector
+##########################
 add_executable(
   train_leg_detector
   src/train_leg_detector.cpp
   src/laser_processor.cpp
-  src/cluster_features.cpp 
+  src/cluster_features.cpp
 )
 
 target_link_libraries(
@@ -157,6 +181,9 @@ target_link_libraries(
   ${OpenCV_LIBRARIES}
 )
 
+##########################
+# particle_filter
+##########################
 add_executable(
   particle_filter
   src/particle_filter/Particle.cpp
@@ -169,8 +196,14 @@ target_link_libraries(
   particle_filter
   ${catkin_LIBRARIES}
   ${Eigen3_LIBRARIES}
+  # ${OpenMP_LIBS}
 )
+# target_compile_options(particle_filter PRIVATE ${OpenMP_FLAGS})
+# add_dependencies(particle_filter ${catkin_EXPORTED_TARGETS})
 
+##########################
+# blob_publisher
+##########################
 add_executable(
   blob_publisher
   src/particle_filter/blob_publisher.cpp
@@ -183,25 +216,54 @@ target_link_libraries(
   ${Eigen3_LIBRARIES}
 )
 
+
+##########################
+# motion_detector
+##########################
 add_executable(
     motion_detector
     src/motion_detector.cpp
 )
 
 target_link_libraries(
-  motion_detector 
+  motion_detector
+  ${catkin_LIBRARIEparticle_filterS}
+  ${Eigen3_LIBRARIES}
+  ${PCL_LIBRARIES}
+  # ${OpenMP_LIBS}
+)
+# target_compile_options(motion_detector PRIVATE ${OpenMP_FLAGS})
+# add_dependencies(motion_detector ${catkin_EXPORTED_TARGETS})
+
+
+##########################
+# motion_variance
+##########################
+add_executable(
+  motion_variance
+  src/motion_variance.cpp
+)
+
+target_link_libraries(
+  motion_variance
   ${catkin_LIBRARIES}
   ${Eigen3_LIBRARIES}
   ${PCL_LIBRARIES}
+  # ${OpenMP_LIBS}
 )
+# target_compile_options(motion_variance PRIVATE ${OpenMP_FLAGS})
+# add_dependencies(motion_variance ${catkin_EXPORTED_TARGETS})
 
+##########################
+# cloud_cluster
+##########################
 add_executable(
     cloud_cluster
     src/cloud_cluster.cpp
 )
 
 target_link_libraries(
-  cloud_cluster 
+  cloud_cluster
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
 )
