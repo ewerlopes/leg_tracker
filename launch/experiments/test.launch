@@ -33,18 +33,20 @@
     <param name="fixed_frame" type="string" value="odom" />
   </node>
 
-  <node pkg="player_tracker" type="motion_detector" name="motion_detector" output="screen"  required="true" /> <!-- launch-prefix="xterm -e gdb args"/> -->
+  <!-- launch-prefix="xterm -e gdb args"/> -->
   
-    <!-- run rviz -->
-    <node pkg="rviz" type="rviz" name="rviz" />
+  <node pkg="player_tracker" type="motion_variance" name="motion_variance" output="screen"  required="true" />
 
-    <!-- play rosbag -->
-    <node pkg="rosbag" type="play" name="player" output="screen" required="true" 
-        args="--delay=4
-        --clock 
-        --rate=1.0
-        -s 0
-        $(find player_tracker)/rosbags/experiments/_2017-12-12-18-45-06.bag"/>
-    <param name="use_sim_time" value="true" />
+  <!-- run rviz -->
+  <node pkg="rviz" type="rviz" name="rviz" />
+
+  <!-- play rosbag -->
+  <node pkg="rosbag" type="play" name="player" output="screen" required="true" 
+      args="--delay=4
+      --clock 
+      --rate=1.0
+      -s 0
+      $(find player_tracker)/rosbags/experiments/_2017-12-12-18-45-06.bag"/>
+  <param name="use_sim_time" value="true" />
 
 </launch>

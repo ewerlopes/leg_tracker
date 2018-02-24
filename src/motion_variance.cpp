@@ -2,11 +2,15 @@
 
 MotionVariance::MotionVariance(ros::NodeHandle nh, std::string scan_topic, float window_duration, std::string log_filename)
 : MotionDetector(nh, scan_topic, window_duration, log_filename)
-{ /*    */ }
+{
+    initRosComunication();
+}
 
 MotionVariance::MotionVariance(ros::NodeHandle nh, std::string scan_topic, float window_duration):
 MotionDetector(nh, scan_topic,  window_duration)
-{ /*    */ }
+{
+    initRosComunication();
+ }
 
 MotionVariance::~MotionVariance()
 { /*    */ }

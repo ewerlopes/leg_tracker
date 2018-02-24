@@ -157,6 +157,8 @@ void MotionDetector::legClusterCallback(const player_tracker::LegArray::ConstPtr
         cloud.header = leg_clusters_msg->header;
         cloud.points = leg_clusters_msg->legs[i].points;
 
+        ROS_WARN("leg cloud %d size %d", i, leg_clusters_msg->legs[i].points.size());
+
         try{
             tf_listener.waitForTransform("base_link", "odom", ros::Time(0.0), ros::Duration(0.1));
             tf_listener.transformPointCloud("odom", cloud, cloud);
@@ -190,9 +192,9 @@ Eigen::MatrixXd MotionDetector::getProjection(Eigen::MatrixXd &dataset, Eigen::V
 }
 
 Eigen::MatrixXd MotionDetector::getCloudPointsAsMatrix(sensor_msgs::PointCloud2 &input) {
-    Eigen::MatrixXd output;
     sensor_msgs::PointCloud cloud;
     if (sensor_msgs::convertPointCloud2ToPointCloud(input, cloud)){
+        Eigen::MatrixXd output(3, cloud.points.size());
         #pragma omp parallel for
         for (int i=0; i < cloud.points.size(); i++){
             output.col(i) << cloud.points[i].x, cloud.points[i].y, cloud.points[i].z;
@@ -339,7 +341,9 @@ void MotionDetector::saveProjectionToFile(Eigen::MatrixXd projected, int id){
 void MotionDetector::processWindows(const sensor_msgs::LaserScan::ConstPtr &scan_msg){
 
     Cloud2List clusters = extractClusterInWindow();
+    
     if (clusters.empty()) {
+        ROS_WARN("ON processWindows: No clusters found. Skipping...");
         return;
     }
 
@@ -363,9 +367,17 @@ Cloud2List MotionDetector::extractClusterInWindow() {
 
     int mergedClouds = mergeWindowClouds(start_time, ros::Time::now(), to_merge_cloud);
 
+
+    // if (to_merge_cloud.points.empty()){
+    //     ROS_FATAL("Not merging");
+    //     ros::requestShutdown();
+
+    // }
+
     if (!mergedClouds) {
         return Cloud2List();
     }
+
     int convertedClouds = sensor_msgs::convertPointCloudToPointCloud2(to_merge_cloud, as_pointcloud_2);
     if (!convertedClouds) {
         return Cloud2List();

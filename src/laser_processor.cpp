@@ -82,17 +82,14 @@ tf::Point SampleSet::getPosition()
 }
 
 std::vector<geometry_msgs::Point32> SampleSet::getSamples(){
-
     std::vector<geometry_msgs::Point32> points;
-    #pragma omp parallel for
-    for (int i = 0; i < points.size(); i++){
+    for (iterator i = begin(); i != end(); ++i){
         geometry_msgs::Point32 point;
-        point.x = points[i].x;
-        point.y = points[i].y;
+        point.x = (*i)->x;
+        point.y = (*i)->y;
         point.z = 0.0;
         points.push_back(point);
     }
-
     return points;
 }
 
