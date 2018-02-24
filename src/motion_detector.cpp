@@ -97,9 +97,6 @@ void MotionDetector::publishEigenMarker(std_msgs::Header header, Eigen::VectorXd
     eigen_point.y = eigenvect(1) + new_mean.y;
     eigen_point.z = eigenvect(2) + new_mean.z;
     m.points.push_back(eigen_point);
-    //m.pose.position.x = eigenvect(0);
-    //m.pose.position.y = eigenvect(1);
-    //m.pose.position.z = eigenvect(2);
     m.scale.x = 0.05;
     m.scale.y = 0.05;
     m.scale.z = 0.05;
@@ -156,8 +153,6 @@ void MotionDetector::legClusterCallback(const player_tracker::LegArray::ConstPtr
         sensor_msgs::PointCloud cloud;
         cloud.header = leg_clusters_msg->header;
         cloud.points = leg_clusters_msg->legs[i].points;
-
-        ROS_WARN("leg cloud %d size %d", i, leg_clusters_msg->legs[i].points.size());
 
         try{
             tf_listener.waitForTransform("base_link", "odom", ros::Time(0.0), ros::Duration(0.1));
