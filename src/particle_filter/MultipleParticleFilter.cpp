@@ -110,10 +110,10 @@ void MultipleParticleFilter::updateClouds(const player_tracker::PersonArray &peo
 
 void MultipleParticleFilter::createNewClouds(const player_tracker::PersonArray &people, AssociationMatrix &association, IntSet &peopleToAssociate)
 {
-    #pragma omp parallel for
+    // #pragma omp parallel for // cannot do this beacuse it is a set
     for (auto it = peopleToAssociate.begin(); it != peopleToAssociate.end(); ++it) {
         if (clouds.size() >= this->maxClouds) {
-            break;
+            continue;
         }
         ColVector vec = association.row(*it);
         int j = getMostAssociatedCloud(vec);
@@ -121,8 +121,9 @@ void MultipleParticleFilter::createNewClouds(const player_tracker::PersonArray &
         if (j == -1) {
             continue;
         }
+        int new_j = -1;
         #pragma omp critical
-        int new_j = cloneCloud(j);
+        new_j = cloneCloud(j);
         track(new_j, people.people[*it].pose);
     }
 }
@@ -251,7 +252,7 @@ float MultipleParticleFilter::sign(const Vec2f &p1, const Vec2f &p2, const Vec2f
     return diff1.x() * diff2.y() - diff2.x() * diff1.y();
 }
 
-void MultipleParticleFilter::setAssociation(const geometry_msgs::Pose &person, ColVector &association) 
+void MultipleParticleFilter::setAssociation(const geometry_msgs::Pose &person, ColVector &association)
 {
     #pragma omp parallel for
     for (int i = 0; i < clouds.size(); i++) {
@@ -259,7 +260,7 @@ void MultipleParticleFilter::setAssociation(const geometry_msgs::Pose &person, C
     }
 }
 
-void MultipleParticleFilter::setAssociation(const geometry_msgs::Point &person, ColVector &association) 
+void MultipleParticleFilter::setAssociation(const geometry_msgs::Point &person, ColVector &association)
 {
     #pragma omp parallel for
     for (int i = 0; i < clouds.size(); i++) {
@@ -268,7 +269,7 @@ void MultipleParticleFilter::setAssociation(const geometry_msgs::Point &person, 
 }
 
 // most associated person, wrt the cloud, is the person with the lowest value
-int MultipleParticleFilter::getMostAssociatedPerson(RowVector &association) const 
+int MultipleParticleFilter::getMostAssociatedPerson(RowVector &association) const
 {
     // ROS_INFO_STREAM(association);
     if (association.sum() == 0) {
@@ -280,7 +281,7 @@ int MultipleParticleFilter::getMostAssociatedPerson(RowVector &association) cons
 }
 
 // most associated cloud, wrt the cloud, is the cloud with the lowest value
-int MultipleParticleFilter::getMostAssociatedCloud(ColVector &association) const 
+int MultipleParticleFilter::getMostAssociatedCloud(ColVector &association) const
 {
     if (association.sum() == 0) {
         return -1;
@@ -308,7 +309,7 @@ void MultipleParticleFilter::publishClouds()
     geometry_msgs::PoseArray cloud;
     cloud.header.stamp = ros::Time::now();
     cloud.header.frame_id = "/map";
-    
+
     #pragma omp parallel for
     for (int j = 0; j < clouds.size(); j++) {
         clouds[j]->fillPoseArray(cloud);
