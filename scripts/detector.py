@@ -760,8 +760,7 @@ class Tracker:
         self.prev_person_marker_id = marker_id          
 
         # Publish people tracked message
-        self.people_tracked_pub.publish(people_tracked_msg)  
-        rospy.logwarn(people_tracked_msg)
+        self.people_tracked_pub.publish(people_tracked_msg)
         self.polar_grid.publish_fov(now)         
 
 if __name__ == '__main__':
