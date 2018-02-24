@@ -1,5 +1,5 @@
 #include <omp.h>
-
+#include <ros/ros.h>
 #include <player_tracker/motion_variance.h>
 
 int main(int argc, char **argv) {

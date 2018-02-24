@@ -285,7 +285,7 @@ add_dependencies(particle_filter ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(motion_detector ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(test_local_occupancy_grid_mapping ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(cloud_cluster ${PROJECT_NAME}_generate_messages_cpp)
-
+add_dependencies(motion_variance ${PROJECT_NAME}_generate_messages_cpp)
 
 install(
   PROGRAMS scripts/joint_leg_tracker.py

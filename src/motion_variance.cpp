@@ -38,9 +38,12 @@ void MotionVariance::blobDetectionCallback(const player_tracker::Blob &msg)
     MinimalPointCloudList minimalClouds(clouds.size());
     Eigen::VectorXd distances(clouds.size());
 
+
     #pragma omp parallel for
     for (int i = 0; i < clouds.size(); i++) {
-        MinimalPointCloud pc = minimizeCloud(clouds[i]);
+        Eigen::MatrixXd cloudMatrix = getCloudPointsAsMatrix(clouds[i]);       //Contains to_merge_cloud as matrix.
+        Eigen::MatrixXd projected = getProjection(cloudMatrix, direction);
+        MinimalPointCloud pc = minimizeCloud(clouds[i], cloudMatrix, projected);
         minimalClouds[i] = pc;
         distances(i) = computeDistance(pc, msg.pose);
     }
@@ -59,7 +62,6 @@ void MotionVariance::blobDetectionCallback(const player_tracker::Blob &msg)
      */
 }
 
-
 void MotionVariance::convertClouds(Cloud2List &clusters, PointCloudList &clouds)
 {
     #pragma omp parallel for
@@ -68,12 +70,12 @@ void MotionVariance::convertClouds(Cloud2List &clusters, PointCloudList &clouds)
     }
 }
 
-MinimalPointCloud MotionVariance::minimizeCloud(sensor_msgs::PointCloud &cloud)
+MinimalPointCloud MotionVariance::minimizeCloud(sensor_msgs::PointCloud &pc, Eigen::MatrixXd cloudMatrix, Eigen::MatrixXd &projection)
 {
     MinimalPointCloud minimizedCloud;
-    Eigen::MatrixXd cloudMatrix = getCloudPointsAsMatrix(cloud);
     minimizedCloud.centroid = cloudMatrix.rowwise().mean();
-    Eigen::MatrixXd covariance = getClusterVariance(cloudMatrix);
+    minimizedCloud.points = pc;
+    Eigen::MatrixXd covariance = getClusterVariance(projection);
     minimizedCloud.variance = covariance(0);    // covariance of elements of 1 point is a single element!
     return minimizedCloud;
 }
@@ -93,6 +95,7 @@ void MotionVariance::publishVariance(MinimalPointCloud &minimalCloud)
     msg.variance = minimalCloud.variance;
     msg.centroid.x = minimalCloud.centroid.x();
     msg.centroid.y = minimalCloud.centroid.y();
+    msg.points = minimalCloud.points.points;
     msg.centroid.z = 0.1;
 
     variance_pub_.publish(msg);

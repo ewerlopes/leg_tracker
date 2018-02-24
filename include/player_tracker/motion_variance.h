@@ -8,6 +8,7 @@
 typedef struct MinimalPointCloud {
     float variance;
     Eigen::Vector2d centroid;
+    sensor_msgs::PointCloud points;
 } MinimalPointCloud;
 
 typedef std::vector<MinimalPointCloud> MinimalPointCloudList;
@@ -25,7 +26,7 @@ protected:
 
     void convertClouds(Cloud2List &clusters, PointCloudList &clouds);
 
-    virtual MinimalPointCloud minimizeCloud(sensor_msgs::PointCloud &cloud);
+    virtual MinimalPointCloud minimizeCloud(sensor_msgs::PointCloud &pc, Eigen::MatrixXd cloudMatrix, Eigen::MatrixXd &projection);
     virtual float computeDistance(MinimalPointCloud &cloud, const geometry_msgs::Pose &pose);
 
     void publishVariance(float variance, sensor_msgs::PointCloud cloud);
