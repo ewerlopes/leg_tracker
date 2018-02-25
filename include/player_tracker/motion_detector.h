@@ -96,6 +96,8 @@ public:
 
 protected:
 
+    ros::Duration window_duration_;// delta_t
+    ros::Time start_time;          // t_s
     tf::TransformListener tf_listener;
     
     void initRosComunication();
@@ -162,9 +164,6 @@ private:
     bool on_window;
 
     std::ofstream log_file;
-
-    ros::Duration window_duration_;// delta_t
-    ros::Time start_time;          // t_s
 
     ros::NodeHandle nh_;
 

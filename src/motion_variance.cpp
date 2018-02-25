@@ -25,6 +25,11 @@ void MotionVariance::initRosComunication()
 
 void MotionVariance::convertToOdomFrame(const player_tracker::PersonArray &msg){
     try{
+        
+        if ((msg.header.stamp.toSec() - start_time.toSec()) > window_duration_.toSec()) {
+            track_poses_.clear();
+        }
+
         for (int i=0; i < msg.people.size(); i++){
             geometry_msgs::PoseStamped pose_stamped;
             pose_stamped.header  = msg.header;
