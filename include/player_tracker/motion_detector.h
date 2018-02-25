@@ -45,6 +45,7 @@
 #include <sensor_msgs/LaserScan.h>
 #include <sensor_msgs/PointCloud.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/PointField.h>
 #include <std_msgs/Header.h>
 
 // basic file operations
@@ -94,6 +95,9 @@ public:
     ~MotionDetector();
 
 protected:
+
+    tf::TransformListener tf_listener;
+    
     void initRosComunication();
 
     ros::NodeHandle& nodeHandle();
@@ -176,7 +180,6 @@ private:
     ros::ServiceClient client;
     laser_assembler::AssembleScans srv;
     laser_geometry::LaserProjection projector_;
-    tf::TransformListener tf_listener;
 
     PointCircularBuffer window; // 10 is the laser frequency
 

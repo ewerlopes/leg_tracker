@@ -88,8 +88,9 @@ class ObjectTracked:
 
     def __init__(self, x, y, now, confidence, is_player, in_free_space):  
         self.id_num = ObjectTracked.getId()
+        self.is_player = is_player
         self.colour = (0,0,0)
-        self.setIsPerson(is_player)
+        self.setIsPlayer(is_player)
         self.last_seen = now
         self.seen_in_current_scan = True
         self.isPlayer = is_player
@@ -187,8 +188,9 @@ class ObjectTracked:
         '''Return the object x,y position from Kalman'''
         return Position(self.pos_x,self.pos_y)
 
-    def setIsPerson(self, is_person):
-        if is_person:
+    def setIsPlayer(self, is_player):
+        self.is_player = is_player
+        if self.is_player:
             self.colour = (0.9,0.05,0.05)
         else:
             self.colour = (0.2,0.2,0.2)
@@ -252,9 +254,6 @@ class Tracker:
         #self.sub_map = rospy.Subscriber('map', OccupancyGrid, self.map_callback)  # create map subscriber
         #self.sub_local_grid = rospy.Subscriber('test_local_map', OccupancyGrid, self.local_grid_callback)  # create map subscriber
         #self.sub_laser = rospy.Subscriber('/scan', LaserScan, self.laser_callback)  # create laser subscriber
-        
-
-
 
         # Polar grid
         self.polar_grid = PolarGrid()
@@ -573,11 +572,11 @@ class Tracker:
         
         if player_idx is not None:
             if  self.player_position is None:
-                new_object_tracks[player_idx].setIsPerson(True)
+                new_object_tracks[player_idx].setIsPlayer(True)
                 self.player_position = copy.deepcopy(new_object_tracks[player_idx])
             else:
                 if new_object_tracks[player_idx].getPosition().euclideanDistance(self.player_position.getPosition()) < 1: # TODO -< gambiarra
-                    new_object_tracks[player_idx].setIsPerson(True)
+                    new_object_tracks[player_idx].setIsPlayer(True)
                     self.player_position = copy.deepcopy(new_object_tracks[player_idx])
 
         self.objects_tracked = new_object_tracks
@@ -630,7 +629,10 @@ class Tracker:
         if not transform_available:
             rospy.loginfo("Person tracker: tf not avaiable. Not publishing people")
         else:
-            for person in self.objects_tracked:        
+            for person in self.objects_tracked:
+                if not person.is_player:
+                    continue
+
                 if self.publish_occluded or person.seen_in_current_scan: # Only publish people who have been seen in current scan, unless we want to publish occluded people
                     # Get position in the <self.publish_people_frame> frame 
                     ps = PointStamped()

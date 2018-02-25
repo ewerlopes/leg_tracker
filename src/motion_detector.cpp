@@ -38,7 +38,7 @@ void MotionDetector::initRosComunication()
     cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("laser_cloud", 10);
     merged_cloud_cluster_pub = nh_.advertise<sensor_msgs::PointCloud2>("merged_clusters", 10);
     leg_cloud_pub = nh_.advertise<sensor_msgs::PointCloud>("leg_cloud", 10);
-    markers_pub = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 20);
+    markers_pub = nh_.advertise<visualization_msgs::Marker>("eigen_marker", 20);
 
     ros::service::waitForService("assemble_scans");
     client = nh_.serviceClient<laser_assembler::AssembleScans>("assemble_scans");
@@ -266,7 +266,7 @@ Cloud2List MotionDetector::getClusters(sensor_msgs::PointCloud2 &input){
         cloud_cluster->width = cloud_cluster->points.size();
         cloud_cluster->height = 1;
         cloud_cluster->is_dense = true;
-
+        
         // Convert the pointcloud to be used in ROS
         sensor_msgs::PointCloud2::Ptr output(new sensor_msgs::PointCloud2);
         pcl::toROSMsg(*cloud_cluster, *output);

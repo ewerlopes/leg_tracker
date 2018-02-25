@@ -1,5 +1,6 @@
 #include <player_tracker/motion_variance.h>
 
+
 MotionVariance::MotionVariance(ros::NodeHandle nh, std::string scan_topic, float window_duration, std::string log_filename)
 : MotionDetector(nh, scan_topic, window_duration, log_filename)
 {
@@ -19,6 +20,26 @@ void MotionVariance::initRosComunication()
 {
     blob_sub_ = nodeHandle().subscribe("/blob_detection", 1, &MotionVariance::blobDetectionCallback, this);
     variance_pub_ = nodeHandle().advertise<player_tracker::TrackVariance>("/track_variance", 10);
+    player_track_sub_ = nodeHandle().subscribe("/players_tracked", 1, &MotionVariance::trackCallback, this);
+}
+
+void MotionVariance::convertToOdomFrame(const player_tracker::PersonArray &msg){
+    try{
+        for (int i=0; i < msg.people.size(); i++){
+            geometry_msgs::PoseStamped pose_stamped;
+            pose_stamped.header  = msg.header;
+            pose_stamped.pose =  msg.people[i].pose;
+            geometry_msgs::PoseStamped tpose;
+            tf_listener.transformPose("/odom",pose_stamped,tpose); 	
+            track_poses_.push_back(tpose);
+        }
+    }catch (std::exception ex){
+        ROS_ERROR("Could not convert track to odom frame. %s",ex.what());
+    }
+}
+
+void MotionVariance::trackCallback(const player_tracker::PersonArray &msg){
+    convertToOdomFrame(msg);
 }
 
 void MotionVariance::blobDetectionCallback(const player_tracker::Blob &msg)
@@ -106,6 +127,5 @@ void MotionVariance::publishVariance(MinimalPointCloud &minimalCloud)
     msg.centroid.y = minimalCloud.centroid.y();
     msg.centroid.z = minimalCloud.centroid.z();
     msg.points = minimalCloud.points.points;
-
     variance_pub_.publish(msg);
 }

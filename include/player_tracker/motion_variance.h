@@ -1,9 +1,13 @@
 #ifndef PLAYER_TRACKER_MOTION_VARIANCE_H_
 #define PLAYER_TRACKER_MOTION_VARIANCE_H_
 
+#include <tf/transform_listener.h>
+
 #include <player_tracker/motion_detector.h>
 #include <player_tracker/Blob.h>
 #include <player_tracker/TrackVariance.h>
+#include <player_tracker/PersonArray.h>
+#include <player_tracker/Person.h>
 
 typedef struct MinimalPointCloud {
     float variance;
@@ -34,9 +38,14 @@ protected:
 
 private:
     void blobDetectionCallback(const player_tracker::Blob &msg);
+    void trackCallback(const player_tracker::PersonArray &msg);
+    void convertToOdomFrame(const player_tracker::PersonArray &msg);
 
     ros::Subscriber blob_sub_;
     ros::Publisher variance_pub_;
+    ros::Subscriber player_track_sub_;
+
+    std::vector<geometry_msgs::PoseStamped> track_poses_;
 };
 
 #endif // PLAYER_TRACKER_MOTION_VARIANCE_H_
