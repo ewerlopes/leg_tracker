@@ -1,6 +1,6 @@
 #include <omp.h>
 #include <ros/ros.h>
-#include <player_tracker/motion_variance.h>
+#include <player_tracker/spatial_temporal.h>
 
 #define OMP_THREADS 8
 
@@ -11,9 +11,9 @@ int main(int argc, char **argv) {
     ros::NodeHandle nh;
     std::string scan_topic;
     nh.param("scan_topic", scan_topic, std::string("scan"));
-    //MotionVariance md(nh, scan_topic, 1, "/home/airlab/Scrivania/log_file.txt");
+    spatial_temporal::Extractor ext(nh, scan_topic, 1, "/home/ewerlopes/Downloads/log_file.txt");
 
-    MotionVariance md(nh, scan_topic, 1);
+    //spatial_temporal::Extractor ext(nh, scan_topic, 1);
 
     ros::spin();
     return 0;

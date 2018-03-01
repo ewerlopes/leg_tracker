@@ -14,9 +14,9 @@ int main(int argc, char **argv) {
     ros::NodeHandle nh;
     std::string scan_topic;
     nh.param("scan_topic", scan_topic, std::string("scan"));
-    MotionDetector md(nh, scan_topic, 1, "/home/airlab/Scrivania/log_file.txt");
+    Extractor md(nh, scan_topic, 1, "/home/airlab/Scrivania/log_file.txt");
 
-    //MotionDetector md(nh, scan_topic, 1);
+    //Extractor md(nh, scan_topic, 1);
 
     ros::spin();
     return 0;

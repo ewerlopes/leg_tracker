@@ -19,7 +19,7 @@ typedef std::vector<MinimalPointCloud> MinimalPointCloudList;
 
 #define OMP_THREADS 8
 
-class MotionVariance : public MotionDetector {
+class MotionVariance : public Extractor {
 public:
     MotionVariance(ros::NodeHandle nh, std::string scan_topic, float window_duration, std::string log_filename);
     MotionVariance(ros::NodeHandle nh, std::string scan_topic, float window_duration);

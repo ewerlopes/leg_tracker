@@ -34,7 +34,7 @@ public:
   * @param scan_topic The topic for the scan we would like to map
   */
   OccupancyGridMapping(ros::NodeHandle nh, std::string scan_topic): nh_(nh), 
-  		grid_centre_pos_found_(false), scan_topic_(scan_topic){
+  		grid_centre_pos_found_(false), scanTopic_(scan_topic){
 
     ros::NodeHandle nh_private("~");
     std::string local_map_topic;
@@ -67,20 +67,20 @@ public:
       }
     }
 
-	scan_sub_ = nh_.subscribe("/scan", 1, &OccupancyGridMapping::laserCallback, this);
+	laserScanSubscriber_ = nh_.subscribe("/scan", 1, &OccupancyGridMapping::laserCallback, this);
     map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>(local_map_topic, 10);
 
 	timer = nh_.createTimer(ros::Duration(0.05), &OccupancyGridMapping::reset, this);
   }
 
 private:
-	std::string scan_topic_;
+	std::string scanTopic_;
 	std::string fixed_frame_;
 	std::string base_frame_;
 
 	ros::NodeHandle nh_;
 
-	ros::Subscriber scan_sub_;
+	ros::Subscriber laserScanSubscriber_;
 	ros::Publisher map_pub_;
 
 	ros::Time last_time_;
@@ -132,7 +132,7 @@ private:
 	/**
 	* @brief Coordinated callback for both laser scan message
 	*/
-	void laserCallback(const sensor_msgs::LaserScan::ConstPtr &scan_msg) {
+	void laserCallback(const sensor_msgs::LaserScan::ConstPtr &scanMsg) {
 		
 		// Find out the time that should be used for tfs
 		bool transform_available;
@@ -140,9 +140,9 @@ private:
 		
 		if (use_scan_header_stamp_for_tfs_) {
 			// Use time from scan header
-			tf_time = scan_msg->header.stamp;
+			tf_time = scanMsg->header.stamp;
 			try {
-				tfl_.waitForTransform(fixed_frame_, scan_msg->header.frame_id, tf_time, ros::Duration(1.0));
+				tfl_.waitForTransform(fixed_frame_, scanMsg->header.frame_id, tf_time, ros::Duration(1.0));
 				transform_available = true;
 			} catch (tf::TransformException ex) {
 				ROS_INFO("Local map: No tf available");
@@ -151,7 +151,7 @@ private:
 		} else {
 			// Otherwise just use the latest tf available
 			tf_time = ros::Time(0);
-			transform_available = tfl_.canTransform(fixed_frame_, scan_msg->header.frame_id, tf_time);
+			transform_available = tfl_.canTransform(fixed_frame_, scanMsg->header.frame_id, tf_time);
 		}
 
 		if (transform_available) {
@@ -161,7 +161,7 @@ private:
 			bool transform_succesful;
 			geometry_msgs::PoseStamped init_pose;
 			geometry_msgs::PoseStamped laser_pose_fixed_frame;
-			init_pose.header.frame_id = scan_msg->header.frame_id;
+			init_pose.header.frame_id = scanMsg->header.frame_id;
 			init_pose.pose.orientation = tf::createQuaternionMsgFromYaw(0.0);
 			init_pose.header.stamp = tf_time;
 			try {
@@ -228,25 +228,25 @@ private:
 										i * resolution_ + grid_centre_pos_x_ - (width_ / 2.0) * resolution_ - laser_x) - laser_yaw);
 						bool is_human;
 
-					if (angle > scan_msg->angle_min - scan_msg->angle_increment / 2.0 and angle < scan_msg->angle_max + scan_msg->angle_increment / 2.0) {
+					if (angle > scanMsg->angle_min - scanMsg->angle_increment / 2.0 and angle < scanMsg->angle_max + scanMsg->angle_increment / 2.0) {
 						// Find applicable laser measurement
-						double closest_beam_angle = round(angle / scan_msg->angle_increment) * scan_msg->angle_increment;
-						int closest_beam_idx = (int)round(angle / scan_msg->angle_increment) + scan_msg->ranges.size() / 2;
+						double closest_beam_angle = round(angle / scanMsg->angle_increment) * scanMsg->angle_increment;
+						int closest_beam_idx = (int)round(angle / scanMsg->angle_increment) + scanMsg->ranges.size() / 2;
 
 						// Processing the range value of the closest_beam to determine if
 						// it's a valid measurement or not.
 						// Sometimes it returns infs and NaNs that have to be dealt with
 						bool valid_measurement;
-						if (scan_msg->range_min <= scan_msg->ranges[closest_beam_idx] && scan_msg->ranges[closest_beam_idx] <= scan_msg->range_max) {
+						if (scanMsg->range_min <= scanMsg->ranges[closest_beam_idx] && scanMsg->ranges[closest_beam_idx] <= scanMsg->range_max) {
 							// This is a valid measurement.
 							valid_measurement = true;
-						} else if (!std::isfinite(scan_msg->ranges[closest_beam_idx]) && scan_msg->ranges[closest_beam_idx] < 0) {
+						} else if (!std::isfinite(scanMsg->ranges[closest_beam_idx]) && scanMsg->ranges[closest_beam_idx] < 0) {
 							// Object too close to measure.
 							valid_measurement = false;
-						} else if (!std::isfinite(scan_msg->ranges[closest_beam_idx]) && scan_msg->ranges[closest_beam_idx] > 0) {
+						} else if (!std::isfinite(scanMsg->ranges[closest_beam_idx]) && scanMsg->ranges[closest_beam_idx] > 0) {
 							// No objects detected in range.
 							valid_measurement = true;
-						} else if (std::isnan(scan_msg->ranges[closest_beam_idx])) {
+						} else if (std::isnan(scanMsg->ranges[closest_beam_idx])) {
 							// This is an erroneous, invalid, or missing measurement.
 							valid_measurement = false;
 						} else {
@@ -257,12 +257,12 @@ private:
 						}
 
 						if (valid_measurement) {
-							double dist_rel = dist - scan_msg->ranges[closest_beam_idx];
+							double dist_rel = dist - scanMsg->ranges[closest_beam_idx];
 							double angle_rel = angle - closest_beam_angle;
-							if (dist > scan_msg->range_max or dist > scan_msg->ranges[closest_beam_idx] + ALPHA / 2.0 or
-								fabs(angle_rel) > BETA / 2 or (!std::isfinite(scan_msg->ranges[closest_beam_idx]) and dist > reliable_inf_range_))
+							if (dist > scanMsg->range_max or dist > scanMsg->ranges[closest_beam_idx] + ALPHA / 2.0 or
+								fabs(angle_rel) > BETA / 2 or (!std::isfinite(scanMsg->ranges[closest_beam_idx]) and dist > reliable_inf_range_))
 								m_update = UNKNOWN;
-							else if (scan_msg->ranges[closest_beam_idx] < scan_msg->range_max and fabs(dist_rel) < ALPHA / 2 and !is_human)
+							else if (scanMsg->ranges[closest_beam_idx] < scanMsg->range_max and fabs(dist_rel) < ALPHA / 2 and !is_human)
 								m_update = OBSTACLE;
 							else
 								m_update = FREE_SPACE;
@@ -287,7 +287,7 @@ private:
 
 			// Create and fill out an OccupancyGrid message
 			nav_msgs::OccupancyGrid m_msg;
-			m_msg.header.stamp = scan_msg->header.stamp; // ros::Time::now();
+			m_msg.header.stamp = scanMsg->header.stamp; // ros::Time::now();
 			m_msg.header.frame_id = fixed_frame_;
 			m_msg.info.resolution = resolution_;
 			m_msg.info.width = width_;

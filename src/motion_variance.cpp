@@ -2,13 +2,13 @@
 
 
 MotionVariance::MotionVariance(ros::NodeHandle nh, std::string scan_topic, float window_duration, std::string log_filename)
-: MotionDetector(nh, scan_topic, window_duration, log_filename)
+: Extractor(nh, scan_topic, window_duration, log_filename)
 {
     initRosComunication();
 }
 
 MotionVariance::MotionVariance(ros::NodeHandle nh, std::string scan_topic, float window_duration):
-MotionDetector(nh, scan_topic,  window_duration)
+Extractor(nh, scan_topic,  window_duration)
 {
     initRosComunication();
  }
@@ -18,7 +18,7 @@ MotionVariance::~MotionVariance()
 
 void MotionVariance::initRosComunication()
 {
-    blob_sub_ = nodeHandle().subscribe("/blob_detection", 1, &MotionVariance::blobDetectionCallback, this);
+    //blob_sub_ = nodeHandle().subscribe("/blob_detection", 1, &MotionVariance::blobDetectionCallback, this);
     variance_pub_ = nodeHandle().advertise<player_tracker::TrackVariance>("/track_variance", 10);
     player_track_sub_ = nodeHandle().subscribe("/players_tracked", 1, &MotionVariance::trackCallback, this);
 }
@@ -26,7 +26,7 @@ void MotionVariance::initRosComunication()
 void MotionVariance::convertToOdomFrame(const player_tracker::PersonArray &msg){
     try{
         
-        if ((msg.header.stamp.toSec() - start_time.toSec()) > window_duration_.toSec()) {
+        if ((msg.header.stamp.toSec() - startTime_.toSec()) > windowDuration_.toSec()) {
             track_poses_.clear();
         }
 
@@ -35,7 +35,7 @@ void MotionVariance::convertToOdomFrame(const player_tracker::PersonArray &msg){
             pose_stamped.header  = msg.header;
             pose_stamped.pose =  msg.people[i].pose;
             geometry_msgs::PoseStamped tpose;
-            tf_listener.transformPose("/odom",pose_stamped,tpose); 	
+            tfListener_.transformPose("/odom",pose_stamped,tpose); 	
             track_poses_.push_back(tpose);
         }
     }catch (std::exception ex){
@@ -53,7 +53,7 @@ void MotionVariance::blobDetectionCallback(const player_tracker::Blob &msg)
         return;
     }
 
-    Cloud2List clusters = extractClusterInWindow();
+    Cloud2List clusters = getClustersInWindow();
     PointCloudList clouds(clusters.size());
     Eigen::VectorXd direction;
 
@@ -75,8 +75,8 @@ void MotionVariance::blobDetectionCallback(const player_tracker::Blob &msg)
 
     #pragma omp parallel for
     for (int i = 0; i < clouds.size(); i++) {
-        Eigen::MatrixXd cloudMatrix = getCloudPointsAsMatrix(clouds[i]);       //Contains to_merge_cloud as matrix.
-        Eigen::MatrixXd projected = getProjection(cloudMatrix, direction);
+        Eigen::MatrixXd cloudMatrix = cloudPointAsMatrix(clouds[i]);       //Contains to_merge_cloud as matrix.
+        Eigen::MatrixXd projected = projectToEigenvector(cloudMatrix, direction);
         MinimalPointCloud pc = minimizeCloud(clouds[i], cloudMatrix, projected);
         minimalClouds[i] = pc;
         distances(i) = computeDistance(pc, msg.pose);
@@ -109,7 +109,7 @@ MinimalPointCloud MotionVariance::minimizeCloud(sensor_msgs::PointCloud &pc, Eig
     MinimalPointCloud minimizedCloud;
     minimizedCloud.centroid = cloudMatrix.rowwise().mean(); // this is just a col
     minimizedCloud.points = pc;
-    Eigen::MatrixXd covariance = getClusterVariance(projection);
+    Eigen::MatrixXd covariance = computeClusterVariance(projection);
     minimizedCloud.variance = covariance(0);    // covariance of elements of 1 point is a single element!
     return minimizedCloud;
 }

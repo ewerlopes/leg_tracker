@@ -221,42 +221,41 @@ target_link_libraries(
 ##########################
 # motion_detector
 ##########################
-add_executable(
-    motion_detector
-    src/motion_detector_node.cpp
-    src/motion_detector.cpp
-)
+# add_executable(
+#     motion_detector
+#     src/motion_detector_node.cpp
+#     src/spatial_temporal.cpp
+# )
 
-target_link_libraries(
-  motion_detector
-  ${catkin_LIBRARIES}
-  ${Eigen3_LIBRARIES}
-  ${PCL_LIBRARIES}
-  ${OpenMP_LIBS}
-)
+# target_link_libraries(
+#   motion_detector
+#   ${catkin_LIBRARIES}
+#   ${Eigen3_LIBRARIES}
+#   ${PCL_LIBRARIES}
+#   ${OpenMP_LIBS}
+# )
 # target_compile_options(motion_detector PRIVATE ${OpenMP_FLAGS})
 # add_dependencies(motion_detector ${catkin_EXPORTED_TARGETS})
 
 
 ##########################
-# motion_variance
+# spatial_temporal_node
 ##########################
 add_executable(
-  motion_variance
-  src/motion_variance_node.cpp
-  src/motion_variance.cpp
-  src/motion_detector.cpp
+  spatial_temporal_node
+  src/spatial_temporal_node.cpp
+  src/spatial_temporal.cpp
 )
 
 target_link_libraries(
-  motion_variance
+  spatial_temporal_node
   ${catkin_LIBRARIES}
   ${Eigen3_LIBRARIES}
   ${PCL_LIBRARIES}
   ${OpenMP_LIBS}
 )
-target_compile_options(motion_variance PRIVATE ${OpenMP_FLAGS})
-add_dependencies(motion_variance ${catkin_EXPORTED_TARGETS})
+target_compile_options(spatial_temporal_node PRIVATE ${OpenMP_FLAGS})
+add_dependencies(spatial_temporal_node ${catkin_EXPORTED_TARGETS})
 
 ##########################
 # cloud_cluster
@@ -282,10 +281,9 @@ add_dependencies(extract_positive_training_clusters ${PROJECT_NAME}_gencfg)
 add_dependencies(train_leg_detector ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(train_leg_detector ${PROJECT_NAME}_gencfg)
 add_dependencies(particle_filter ${PROJECT_NAME}_generate_messages_cpp)
-add_dependencies(motion_detector ${PROJECT_NAME}_generate_messages_cpp)
+add_dependencies(spatial_temporal_node ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(test_local_occupancy_grid_mapping ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(cloud_cluster ${PROJECT_NAME}_generate_messages_cpp)
-add_dependencies(motion_variance ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(blob_publisher ${PROJECT_NAME}_generate_messages_cpp)
 
 install(

@@ -46,10 +46,10 @@ public:
   OccupancyGridMapping(ros::NodeHandle nh, std::string scan_topic):
     nh_(nh),
     grid_centre_pos_found_(false),
-    scan_topic_(scan_topic),
-    scan_sub_(nh_, scan_topic, 100),
+    scanTopic_(scan_topic),
+    laserScanSubscriber_(nh_, scan_topic, 100),
     non_leg_clusters_sub_(nh_, "non_leg_clusters", 100),
-    sync(scan_sub_, non_leg_clusters_sub_, 100)
+    sync(laserScanSubscriber_, non_leg_clusters_sub_, 100)
   {
     ros::NodeHandle nh_private("~");
     std::string local_map_topic;
@@ -93,12 +93,12 @@ public:
 
 
 private:
-  std::string scan_topic_;
+  std::string scanTopic_;
   std::string fixed_frame_;
   std::string base_frame_;
 
   ros::NodeHandle nh_;
-  message_filters::Subscriber<sensor_msgs::LaserScan> scan_sub_;
+  message_filters::Subscriber<sensor_msgs::LaserScan> laserScanSubscriber_;
   message_filters::Subscriber<player_tracker::LegArray> non_leg_clusters_sub_;
   message_filters::TimeSynchronizer<sensor_msgs::LaserScan, player_tracker::LegArray> sync;
   ros::Subscriber odom_sub_;
@@ -137,7 +137,7 @@ private:
   * 
   * Called whenever both topics have been recently published to
   */
-  void laserAndLegCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg, const player_tracker::LegArray::ConstPtr& non_leg_clusters)
+  void laserAndLegCallback(const sensor_msgs::LaserScan::ConstPtr& scanMsg, const player_tracker::LegArray::ConstPtr& non_leg_clusters)
   {
     // Find out the time that should be used for tfs
     bool transform_available;
@@ -145,11 +145,11 @@ private:
     if (use_scan_header_stamp_for_tfs_)
     {
       // Use time from scan header
-      tf_time = scan_msg->header.stamp;
+      tf_time = scanMsg->header.stamp;
 
       try
       {
-        tfl_.waitForTransform(fixed_frame_, scan_msg->header.frame_id, tf_time, ros::Duration(1.0));
+        tfl_.waitForTransform(fixed_frame_, scanMsg->header.frame_id, tf_time, ros::Duration(1.0));
         transform_available = true;
       }
       catch(tf::TransformException ex)
@@ -162,7 +162,7 @@ private:
     {
       // Otherwise just use the latest tf available
       tf_time = ros::Time(0);
-      transform_available = tfl_.canTransform(fixed_frame_, scan_msg->header.frame_id, tf_time);
+      transform_available = tfl_.canTransform(fixed_frame_, scanMsg->header.frame_id, tf_time);
     }
     
     if (transform_available)
@@ -183,7 +183,7 @@ private:
         tf::Stamped<tf::Point> ps(p, tf_time, fixed_frame_);
         try
         {
-          tfl_.transformPoint(scan_msg->header.frame_id, ps, ps);
+          tfl_.transformPoint(scanMsg->header.frame_id, ps, ps);
           non_legs.push_back(tf::Point(ps[0],ps[1],0));
         }
         catch (tf::TransformException ex)
@@ -195,8 +195,8 @@ private:
       // Determine which scan samples correspond to humans 
       // so we can mark those areas as unoccupied in the map
       std::vector<bool> is_sample_human;
-      is_sample_human.resize(scan_msg->ranges.size(), false);
-      sensor_msgs::LaserScan scan = *scan_msg;
+      is_sample_human.resize(scanMsg->ranges.size(), false);
+      sensor_msgs::LaserScan scan = *scanMsg;
       laser_processor::ScanProcessor processor(scan); 
       processor.splitConnected(cluster_dist_euclid_);        
       processor.removeLessThan(min_points_per_cluster_);   
@@ -389,7 +389,7 @@ private:
 
         // Create and fill out an OccupancyGrid message
         nav_msgs::OccupancyGrid m_msg;
-        m_msg.header.stamp = scan_msg->header.stamp; //ros::Time::now();
+        m_msg.header.stamp = scanMsg->header.stamp; //ros::Time::now();
         m_msg.header.frame_id = fixed_frame_;
         m_msg.info.resolution = resolution_;
         m_msg.info.width = width_;

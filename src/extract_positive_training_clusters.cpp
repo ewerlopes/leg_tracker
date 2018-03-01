@@ -45,7 +45,7 @@ public:
             ROS_ERROR("Couldn't get bag_load_file from ros param server");
         if (!nh_private.getParam("save_bag_file", save_bag_file_))
             ROS_ERROR("Couldn't get bag_save_file from ros param server");
-        if (!nh_private.getParam("scan_topic", scan_topic_))
+        if (!nh_private.getParam("scan_topic", scanTopic_))
             ROS_ERROR("Couldn't get scan_topic from ros param server");
         if (!nh_private.getParam("laser_frame", laser_frame_))
             ROS_ERROR("Couldn't get laser_frame from ros param server");
@@ -102,7 +102,7 @@ public:
 
         // Iterate through all scan messages in the loaded rosbag
         std::vector<std::string> topics;
-        topics.push_back(std::string(scan_topic_));
+        topics.push_back(std::string(scanTopic_));
         rosbag::View view(load_bag, rosbag::TopicQuery(topics));
         
         BOOST_FOREACH (rosbag::MessageInstance const m, view) {
@@ -144,7 +144,7 @@ public:
                                   leg_cluster_positions);
 
                     // Save scan
-                    save_bag.write(scan_topic_, scan->header.stamp,//ros::Time::now(), 
+                    save_bag.write(scanTopic_, scan->header.stamp,//ros::Time::now(), 
                     *scan);
 
                     // Save a marker of the position of the cluster we extracted.
@@ -180,7 +180,7 @@ public:
 private:
     tf::TransformListener tfl_;
     std::string laser_frame_;
-    std::string scan_topic_;
+    std::string scanTopic_;
 
     ros::NodeHandle nh_;
 

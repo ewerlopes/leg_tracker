@@ -38,7 +38,9 @@
 
   <!-- launch-prefix="xterm -e gdb args"/> -->
   
-  <node pkg="player_tracker" type="motion_variance" name="motion_variance" output="screen"  required="true" />
+ <!-- <node pkg="player_tracker" type="motion_variance" name="motion_variance" output="screen"  required="true" /> -->
+
+  <node pkg="player_tracker" type="spatial_temporal_node" name="spatial_temporal_node" output="screen"  required="true" />
 
   <node pkg="player_tracker" type="blob_publisher" name="blob_publisher" output="screen"  required="true" />
 
