@@ -487,13 +487,13 @@ class Tracker:
                 # Check track for deletion           
                 if track.confidence < self.confidence_threshold_to_maintain_track:
                     tracks_to_delete.add(track)
-                    rospy.loginfo("deleting track due to low confidence...")
+                    rospy.logdebug("deleting track due to low confidence...")
                 else:
                     # Check track for deletion because covariance is too large
                     cov = track.filtered_state_covariances[0][0] + track.var_obs # cov_xx == cov_yy == cov
                     if cov > self.max_cov:
                         tracks_to_delete.add(track)
-                        rospy.loginfo("deleting track due to large covariance...")
+                        rospy.logdebug("deleting track due to large covariance...")
                         #rospy.loginfo("deleting because unseen for %.2f", (now - track.last_seen).to_sec())
 
             ###  ---------------------- ###

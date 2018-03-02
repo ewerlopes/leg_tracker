@@ -123,14 +123,3 @@ float MotionVariance::computeDistance(MinimalPointCloud &cloud, const geometry_m
 }
 
 
-void MotionVariance::publishVariance(MinimalPointCloud &minimalCloud)
-{
-    player_tracker::TrackVariance msg;
-    msg.header.stamp = ros::Time::now();
-    msg.variance = minimalCloud.variance;
-    msg.centroid.x = minimalCloud.centroid.x();
-    msg.centroid.y = minimalCloud.centroid.y();
-    msg.centroid.z = minimalCloud.centroid.z();
-    msg.points = minimalCloud.points.points;
-    variance_pub_.publish(msg);
-}

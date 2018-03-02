@@ -962,8 +962,3 @@ class KalmanMultiTracker:
 if __name__ == '__main__':
     rospy.init_node('multi_person_tracker', anonymous=True)
     kmt = KalmanMultiTracker()
-
-
-
-
-

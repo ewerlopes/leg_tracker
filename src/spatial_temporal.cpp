@@ -1,4 +1,5 @@
 #include <player_tracker/spatial_temporal.h>
+#include <exception>
 
 spatial_temporal::Extractor::Extractor(ros::NodeHandle nh, std::string scanTopic, float windowDuration, std::string logFilename)
     : nh_(nh), scanTopic_(scanTopic), windowDuration_(windowDuration), onRunningWindow_(false){
@@ -75,14 +76,15 @@ void spatial_temporal::Extractor::publishEigenvectorMarker(std_msgs::Header head
     if (eigenvect(2) > 0)
         eigenvect = eigenvect * -1;
 
+    eigenvect = eigenvect * 0.25;
     geometry_msgs::Point eigen_point;
     eigen_point.x = eigenvect(0) + offset.x;
     eigen_point.y = eigenvect(1) + offset.y;
     eigen_point.z = eigenvect(2) + offset.z;
     m.points.push_back(eigen_point);
-    m.scale.x = 0.05;
-    m.scale.y = 0.05;
-    m.scale.z = 0.05;
+    m.scale.x = 0.03;
+    m.scale.y = 0.03;
+    m.scale.z = 0.03;
     m.color.a = 1;
     m.color.r = 1;
     m.color.g = 0;
@@ -93,14 +95,26 @@ void spatial_temporal::Extractor::publishEigenvectorMarker(std_msgs::Header head
     markerPublisher_.publish(m);
 }
 
+void spatial_temporal::Extractor::publishVariance(MinimalPointCloud &minimalCloud)
+{
+    player_tracker::TrackVariance msg;
+    msg.header.stamp = ros::Time::now();
+    msg.variance = minimalCloud.variance;
+    msg.centroid.x = minimalCloud.centroid.x();
+    msg.centroid.y = minimalCloud.centroid.y();
+    msg.centroid.z = minimalCloud.centroid.z();
+    msg.points = minimalCloud.points.points;
+    //variance_pub_.publish(msg);
+}
+
 int spatial_temporal::Extractor::assembledCloud(ros::Time from, ros::Time to, sensor_msgs::PointCloud &cloud){
     assembleScanServiceMsg_.request.begin = from;
     assembleScanServiceMsg_.request.end   = to;
 
-    ROS_WARN("Time diff: %f", (assembleScanServiceMsg_.request.end.toSec() - startTime_.toSec()));
+    ROS_DEBUG("Assembled time diff: %f", (assembleScanServiceMsg_.request.end.toSec() - startTime_.toSec()));
 
     if (assembleScanServiceClient_.call(assembleScanServiceMsg_)){
-        ROS_INFO("Got cloud with %lu points\n", assembleScanServiceMsg_.response.cloud.points.size());
+        ROS_DEBUG("Got cloud with %lu points\n", assembleScanServiceMsg_.response.cloud.points.size());
         cloud = assembleScanServiceMsg_.response.cloud;
         return 1;
     }else{
@@ -118,7 +132,7 @@ void spatial_temporal::Extractor::setTemporalDimension(sensor_msgs::PointCloud &
 
 void spatial_temporal::Extractor::saveToLogFile(std::string text){
         if (logFile_.is_open()){
-        logFile_ << text.c_str() << std::endl;
+        logFile_ << text.c_str() << std::endl << std::flush;
     }
 }
 
@@ -143,7 +157,7 @@ void spatial_temporal::Extractor::legArrayCallback(const player_tracker::LegArra
             setTemporalDimension(cloud, (ros::Time::now().toSec() - startTime_.toSec()));
             #pragma omp critical
             legCloudPublisher_.publish(cloud);
-        }catch (std::exception ex){
+        }catch (std::exception& ex){
             ROS_ERROR("%s",ex.what());
         }
     }
@@ -261,38 +275,28 @@ Cloud2List spatial_temporal::Extractor::getClusters(sensor_msgs::PointCloud2 &in
         count++;
     }
 
-    ROS_WARN("Number of clusters: %d", count);
+    ROS_DEBUG("Number of clusters: %d", count);
     return clusters;
 }
 
-Eigen::VectorXd spatial_temporal::Extractor::getClusterSmallestEigenValue(Eigen::MatrixXd cov){
+Eigen::VectorXd spatial_temporal::Extractor::getClusterSmallestEigenvector(Eigen::MatrixXd cov){
     Eigen::VectorXd eigenvals = cov.eigenvalues().real();
     Eigen::EigenSolver<Eigen::MatrixXd> es(cov);
     Eigen::MatrixXd eigenvecs = es.eigenvectors().real();
-
     Eigen::MatrixXd::Index minIndex;
     double minVal = eigenvals.col(0).minCoeff(&minIndex);
-
-    ROS_INFO_STREAM("EIGENVALUES:\n " << eigenvals);
-    ROS_INFO_STREAM("minVal: " << minVal << "\tminIndex: " << minIndex);
     return eigenvecs.col(minIndex);
 }
 
 
-Eigen::VectorXd spatial_temporal::Extractor::getClusterSmallestEigenValue(sensor_msgs::PointCloud2 &cluster){
+Eigen::VectorXd spatial_temporal::Extractor::getClusterSmallestEigenvector(sensor_msgs::PointCloud2 &cluster){
     // get cluster variance
     Eigen::MatrixXd cov = computeClusterVariance(cluster);
     Eigen::VectorXd eigenvals = cov.eigenvalues().real();
     Eigen::EigenSolver<Eigen::MatrixXd> es(cov);
     Eigen::MatrixXd eigenvecs = es.eigenvectors().real();
-
-
     Eigen::MatrixXf::Index minIndex;
     double minVal = eigenvals.col(0).minCoeff(&minIndex);
-
-
-    ROS_INFO_STREAM("EIGENVALUES:\n " << eigenvals);
-    ROS_INFO_STREAM("minVal: " << minVal << "\tminIndex: " << minIndex);
     return eigenvecs.col(minIndex);
 }
 
@@ -309,7 +313,7 @@ void spatial_temporal::Extractor::saveProjectionToFile(){
      Cloud2List clusters = getClustersInWindow();
     
     if (clusters.empty()) {
-        ROS_WARN("ON computeSpatialTemporalFeatures: No clusters found. Skipping...");
+        ROS_DEBUG("ON computeSpatialTemporalFeatures: No clusters found. Skipping...");
         return;
     }
 
@@ -333,21 +337,65 @@ void spatial_temporal::Extractor::saveProjectionToFile(){
 }
 
 
+std::vector<std::pair <int,float>> spatial_temporal::Extractor::getSimilarity(sensor_msgs::PointCloud2 &cluster){
+    sensor_msgs::PointCloud cluster_converted;
+    if(!sensor_msgs::convertPointCloud2ToPointCloud(cluster, cluster_converted)){
+        ROS_ERROR("Error when converting clusters for comparison.");
+    }
+
+    std::vector<std::pair <int,float>> jaccard_similarities;
+
+    #pragma omp parallel for
+    for(int i=0; i < current_clusters_.size(); i++){
+        sensor_msgs::PointCloud c;
+        if(!sensor_msgs::convertPointCloud2ToPointCloud(current_clusters_[i], c)){
+            ROS_ERROR("Error when converting clusters for comparison.");
+        }
+        #pragma omp critical
+        jaccard_similarities.push_back(std::make_pair(i,computeJaccardSimilarity(c, cluster_converted)));
+    }
+
+    return jaccard_similarities;
+}
+
+float spatial_temporal::Extractor::computeJaccardSimilarity(sensor_msgs::PointCloud &cloudIn1, sensor_msgs::PointCloud &cloudIn2){
+    // Sort lists
+    std::sort(cloudIn1.points.begin(), cloudIn1.points.end(), spatial_temporal::comparator);
+    std::sort(cloudIn2.points.begin(), cloudIn2.points.end(), spatial_temporal::comparator);
+
+    std::vector<geometry_msgs::Point32> union_set;
+    std::vector<geometry_msgs::Point32> intersection_set;
+
+    std::set_union(cloudIn1.points.begin(), cloudIn1.points.end(),
+                   cloudIn2.points.begin(), cloudIn2.points.end(),                  
+                   std::back_inserter(union_set),
+                   spatial_temporal::comparator);
+    
+    std::set_intersection(cloudIn1.points.begin(), cloudIn1.points.end(),
+                          cloudIn2.points.begin(), cloudIn2.points.end(),                  
+                          std::back_inserter(intersection_set),
+                          spatial_temporal::comparator);
+
+    return intersection_set.size() / union_set.size();
+}
+
 void spatial_temporal::Extractor::computeSpatialTemporalFeatures(){
 
     Cloud2List clusters = getClustersInWindow();
     
     if (clusters.empty()) {
-        ROS_WARN("ON computeSpatialTemporalFeatures: No clusters found. Skipping...");
+        ROS_DEBUG("ON computeSpatialTemporalFeatures: No clusters found. Skipping...");
         return;
     }
 
     Eigen::MatrixXd eigenvects(3, clusters.size());      // Holds all eigenvectors;
     #pragma omp parallel for
     for(int i=0; i < clusters.size(); i++){
-        ROS_INFO("Processing cluster %d", i);
-        Eigen::VectorXd eigenvect = getClusterSmallestEigenValue(clusters[i]);
+        ROS_DEBUG("Processing cluster %d", i);
+        Eigen::VectorXd eigenvect = getClusterSmallestEigenvector(clusters[i]);
         eigenvects.col(i) << eigenvect(0), eigenvect(1), eigenvect(2);
+
+        std::vector<std::pair <int,float>> similarities = getSimilarity(clusters[i]);
 
         #pragma omp critical
         cloudClusterPublisher_.publish(clusters[i]);
@@ -358,10 +406,13 @@ void spatial_temporal::Extractor::computeSpatialTemporalFeatures(){
         double dot = eigenvect.dot(plane_normal_);
 
         std::stringstream stream;
-        stream << dot;
+        double cosine = dot / (eigenvect.norm() * plane_normal_.norm());
+        stream << cosine;
         saveToLogFile(stream.str());
     }
 
+    // Save current list of clusters
+    current_clusters_ = clusters;
 
 }
 
@@ -388,8 +439,8 @@ Eigen::MatrixXd spatial_temporal::Extractor::computeMinEigenvectors(Cloud2List &
     Eigen::MatrixXd eigenvects(3, clusters.size());      // Holds all eigenvectors;
     #pragma omp parallel for
     for(int i=0; i < clusters.size(); i++){
-        ROS_INFO("Processing cluster %d", i);
-        Eigen::VectorXd eigenvect = getClusterSmallestEigenValue(clusters[i]);
+        ROS_DEBUG("Processing cluster %d", i);
+        Eigen::VectorXd eigenvect = getClusterSmallestEigenvector(clusters[i]);
         eigenvects.col(i) << eigenvect(0), eigenvect(1), eigenvect(2);
     }
 
@@ -400,8 +451,8 @@ Eigen::VectorXd spatial_temporal::Extractor::computeSteepestDirection(Cloud2List
     Eigen::MatrixXd eigenvects(3, clusters.size());      // Holds all eigenvectors;
     #pragma omp parallel for
     for(int i=0; i < clusters.size(); i++){
-        ROS_INFO("Processing cluster %d", i);
-        Eigen::VectorXd eigenvect = getClusterSmallestEigenValue(clusters[i]);
+        ROS_DEBUG("Processing cluster %d", i);
+        Eigen::VectorXd eigenvect = getClusterSmallestEigenvector(clusters[i]);
         eigenvects.col(i) << eigenvect(0), eigenvect(1), eigenvect(2);
 
         #pragma omp critical
@@ -424,7 +475,7 @@ void spatial_temporal::Extractor::laserCallback(const sensor_msgs::LaserScan::Co
             scanMsg->time_increment), ros::Duration(1.0))) {
             return;
         }
-    }catch (std::exception ex){
+    }catch (std::exception& ex){
         ROS_ERROR("%s", ex.what());
         return;
     }
@@ -433,23 +484,16 @@ void spatial_temporal::Extractor::laserCallback(const sensor_msgs::LaserScan::Co
 
     if (!onRunningWindow_) {
 
-        ROS_WARN("Starting windows...");
+        ROS_DEBUG("Starting NEW windows...");
         onRunningWindow_ = true;
         startTime_ = scanMsg->header.stamp;
 
-    } else if ((scanMsg->header.stamp.toSec() - startTime_.toSec()) < windowDuration_.toSec()) {
-
-        ROS_INFO("Inside windows...");
-        ROS_INFO("Time: %f", (scanMsg->header.stamp.toSec() - startTime_.toSec()));
-
-    } else {
-
-        ROS_WARN("End of windows... Processing");
+    } else if ((scanMsg->header.stamp.toSec() - startTime_.toSec()) > windowDuration_.toSec()) {
+        ROS_DEBUG("End of windows...");
         onRunningWindow_ = false;
         saveToLogFile("--");
         clearWindowCloudList();
         return;
-
     }
 
     cloud = laserMsgAsPointCloud(scanMsg);

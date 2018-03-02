@@ -223,8 +223,7 @@ target_link_libraries(
 ##########################
 # add_executable(
 #     motion_detector
-#     src/motion_detector_node.cpp
-#     src/spatial_temporal.cpp
+#     #     src/spatial_temporal.cpp
 # )
 
 # target_link_libraries(

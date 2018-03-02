@@ -54,11 +54,13 @@
 
 // Custom ROS messages
 #include <player_tracker/LegArray.h>
+#include <player_tracker/TrackVariance.h>
 
 // ROS messages
 #include <visualization_msgs/Marker.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Point.h>
+#include <geometry_msgs/Point32.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/Odometry.h>
 #include <sensor_msgs/point_cloud_conversion.h>
@@ -68,20 +70,41 @@
 #include <sensor_msgs/LaserScan.h>
 #include <std_msgs/Header.h>
 
-// basic file operations
+// C++ headers
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <string>  
+#include <string>
+#include <vector>
+#include <algorithm>    // std::sort
+#include <iterator>
+#include <utility>      // std::pair
 
 typedef std::vector<sensor_msgs::PointCloud2> Cloud2List;
+typedef std::vector<sensor_msgs::PointCloud2> PointCloud2List;
 typedef std::vector<sensor_msgs::PointCloud> PointCloudList;
 
 #define OMP_THREADS 8
 
 namespace spatial_temporal{
 
-/**@class Extractor
+typedef struct MinimalPointCloud{
+    float variance;
+    Eigen::VectorXd centroid;
+    sensor_msgs::PointCloud points;
+} MinimalPointCloud;
+
+/**
+*  @brief a comparison fuction used for the set std template class.
+*/
+struct{
+    bool operator()(const geometry_msgs::Point32 &a, const geometry_msgs::Point32 &b){
+        return ( a.x<b.x && a.y<b.y && a.z<b.z );
+    }
+}comparator;
+
+/**
+*  @class Extractor
 *  @brief Extracts spatial-temporal features from LaserScan msgs.
 */
 class Extractor {
@@ -178,6 +201,19 @@ public:
     void appendWindowCloudList(sensor_msgs::PointCloud &cloud);
 
     /**
+    *  @brief Complete Me
+    *  @param cloud the cloud to append
+    */  
+    void publishVariance(MinimalPointCloud &minimalCloud);
+
+    /**
+    *  @brief Computes Jaccard Similarity between two CloudPoints.
+    *  @param cloud1 1st cloud point.
+    *  @param cloud2 2nd cloud point.
+    */  
+    float computeJaccardSimilarity(sensor_msgs::PointCloud &cloudIn1, sensor_msgs::PointCloud &cloudIn2);
+
+    /**
     *  @brief Assemble PointClouds.
     *  @param from the start time of composing clouds.
     *  @param to the end time of composing clouds.
@@ -186,6 +222,12 @@ public:
     *  @param status return 1 if suceeded. 0 otherwise.
     */  
     int assembledCloud(ros::Time from, ros::Time to, sensor_msgs::PointCloud &cloud);
+
+    /**
+    *  @brief COMPLETE ME.
+    *  @param cluster
+    */  
+    std::vector<std::pair <int,float>> getSimilarity(sensor_msgs::PointCloud2 &cluster);
 
     /**
     *  @brief Compute clusters in Assembled PointCloud from current windows.
@@ -279,13 +321,13 @@ public:
     *  @param from the start time of composing clouds.
     *  @param to the end time of composing clouds.
     */  
-    Eigen::VectorXd getClusterSmallestEigenValue(Eigen::MatrixXd cov);
+    Eigen::VectorXd getClusterSmallestEigenvector(Eigen::MatrixXd cov);
     
     /**
     *  @brief Compute the vector with smallest eigenvalue from PointCloud.
     *  @param cluster the PointCloud cluster to compute from.
     */  
-    Eigen::VectorXd getClusterSmallestEigenValue(sensor_msgs::PointCloud2 &cluster);
+    Eigen::VectorXd getClusterSmallestEigenvector(sensor_msgs::PointCloud2 &cluster);
 
 private:
     std::string scanTopic_;                   ///< holds scan topic
@@ -311,6 +353,7 @@ private:
     laser_geometry::LaserProjection projector_;                 ///< object to transform LaserScan data.
 
     PointCloudList cloudsInWindow;    // TOTO eliminate this variable?
+    PointCloud2List current_clusters_;
 
     Eigen::Vector3d plane_normal_;             ///< XYZ plane normal.
 
