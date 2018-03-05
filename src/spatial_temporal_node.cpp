@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     ros::NodeHandle nh;
     std::string scan_topic;
     nh.param("scan_topic", scan_topic, std::string("scan"));
-    spatial_temporal::Extractor ext(nh, scan_topic, 1, "/home/ewerlopes/Downloads/log_file.txt");
+    spatial_temporal::Extractor ext(nh, scan_topic, 1, "/home/airlab/Scaricati/log_file.txt");
 
     //spatial_temporal::Extractor ext(nh, scan_topic, 1);
 

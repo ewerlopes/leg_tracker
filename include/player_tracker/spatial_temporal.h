@@ -102,7 +102,7 @@ typedef struct MinimalPointCloud{
 */
 struct{
     bool operator()(const geometry_msgs::Point32 &a, const geometry_msgs::Point32 &b){
-        return ( a.x<b.x && a.y<b.y && a.z<b.z );
+        return ( a.x < b.x && a.y < b.y && a.z < b.z );
     }
 }compPoints;
 
@@ -166,7 +166,7 @@ public:
     *  @param offset an offset to the tail of the arrow.
     */  
     void publishEigenvectorMarker(std_msgs::Header header, Eigen::VectorXd eigenvect,
-                                  int marker_id, geometry_msgs::Point offset);
+                                  int marker_id, geometry_msgs::Point offset, float marker_lifetime);
 
     /**
     *  @brief set point cloud z (temporal) dimension.
@@ -360,7 +360,8 @@ private:
     std::string baseFrame_;                   ///< robot base frame
     std::ofstream logFile_;                   ///< log file stream
     bool onRunningWindow_;                    ///< a flag to tell whether we have a current windows running.
-    int process_counter_;                     ///< tracks how many times a windows is processed
+    int window_counter_;                     ///< tracks how many times a windows is processed
+    int win_stamp_counter_;
 
     ros::NodeHandle nh_;                      ///< private ROS node handle
     ros::Subscriber laserScanSubscriber_;     ///< subscriber object for LaserScan messages

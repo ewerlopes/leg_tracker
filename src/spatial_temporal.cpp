@@ -2,7 +2,7 @@
 #include <exception>
 
 spatial_temporal::Extractor::Extractor(ros::NodeHandle nh, std::string scanTopic, float windowDuration, std::string logFilename)
-    : nh_(nh), scanTopic_(scanTopic), windowDuration_(windowDuration), onRunningWindow_(false){
+    : nh_(nh), scanTopic_(scanTopic), windowDuration_(windowDuration), onRunningWindow_(false), window_counter_(0), win_stamp_counter_(0){
     
     ros::NodeHandle nh_private("~");
     logFile_.open(logFilename);
@@ -12,7 +12,7 @@ spatial_temporal::Extractor::Extractor(ros::NodeHandle nh, std::string scanTopic
 }
 
 spatial_temporal::Extractor::Extractor(ros::NodeHandle nh, std::string scanTopic, float windowDuration)
-    : nh_(nh), scanTopic_(scanTopic), windowDuration_(windowDuration), onRunningWindow_(false){
+    : nh_(nh), scanTopic_(scanTopic), windowDuration_(windowDuration), onRunningWindow_(false), window_counter_(0), win_stamp_counter_(0){
     
     ros::NodeHandle nh_private("~");
     baseFrame_ = "odom";
@@ -70,7 +70,7 @@ void spatial_temporal::Extractor::publishAssembledCloud(sensor_msgs::PointCloud 
 }
 
 void spatial_temporal::Extractor::publishEigenvectorMarker(std_msgs::Header header, Eigen::VectorXd eigenvect, 
-                                                           int marker_id, geometry_msgs::Point offset){
+                                                           int marker_id, geometry_msgs::Point offset, float marker_lifetime){
     // Publish marker to rviz
     visualization_msgs::Marker m;
     m.header.stamp = header.stamp;
@@ -89,14 +89,14 @@ void spatial_temporal::Extractor::publishEigenvectorMarker(std_msgs::Header head
     eigen_point.y = eigenvect(1) + offset.y;
     eigen_point.z = eigenvect(2) + offset.z;
     m.points.push_back(eigen_point);
-    m.scale.x = 0.03;
-    m.scale.y = 0.03;
-    m.scale.z = 0.03;
+    m.scale.x = 0.05;
+    m.scale.y = 0.05;
+    m.scale.z = 0.05;
     m.color.a = 1;
     m.color.r = 1;
     m.color.g = 0;
     m.color.b = 0;
-    m.lifetime = ros::Duration(0.1);
+    m.lifetime = ros::Duration(marker_lifetime);
 
     #pragma omp critical
     markerPublisher_.publish(m);
@@ -346,6 +346,7 @@ void spatial_temporal::Extractor::saveProjectionToFile(){
 
 std::vector<std::pair <int,float>> spatial_temporal::Extractor::getSimilarity(sensor_msgs::PointCloud2 &cluster){
     sensor_msgs::PointCloud cluster_converted;
+    
     if(!sensor_msgs::convertPointCloud2ToPointCloud(cluster, cluster_converted)){
         ROS_ERROR("Error when converting clusters for comparison.");
     }
@@ -366,7 +367,7 @@ std::vector<std::pair <int,float>> spatial_temporal::Extractor::getSimilarity(se
 
         float result = computeJaccardSimilarity(c, cluster_converted);
         ROS_DEBUG("Jaccard: %f",result);
-        jaccardSim.push_back(std::make_pair(i,result));
+        jaccardSim.push_back(std::make_pair(i, result));
     }
 
     return jaccardSim;
@@ -374,29 +375,44 @@ std::vector<std::pair <int,float>> spatial_temporal::Extractor::getSimilarity(se
 
 float spatial_temporal::Extractor::computeJaccardSimilarity(sensor_msgs::PointCloud &cloudIn1, sensor_msgs::PointCloud &cloudIn2){
     // Sort lists
-    std::sort(cloudIn1.points.begin(), cloudIn1.points.end(), spatial_temporal::compPoints);
-    std::sort(cloudIn2.points.begin(), cloudIn2.points.end(), spatial_temporal::compPoints);
+    // std::sort(cloudIn1.points.begin(), cloudIn1.points.end(), spatial_temporal::compPoints);
+    // std::sort(cloudIn2.points.begin(), cloudIn2.points.end(), spatial_temporal::compPoints);
 
-    std::vector<geometry_msgs::Point32> union_set;
-    std::vector<geometry_msgs::Point32> intersection_set;
 
-    std::set_union(cloudIn1.points.begin(), cloudIn1.points.end(),
-                   cloudIn2.points.begin(), cloudIn2.points.end(),                  
-                   std::back_inserter(union_set),
-                   spatial_temporal::compPoints);
+    // std::vector<geometry_msgs::Point32> union_set;
+    // std::vector<geometry_msgs::Point32> intersection_set;
+
+    // std::set_union(cloudIn1.points.begin(), cloudIn1.points.end(),
+    //                cloudIn2.points.begin(), cloudIn2.points.end(),                  
+    //                std::back_inserter(union_set),
+    //                spatial_temporal::compPoints);
     
-    std::set_intersection(cloudIn1.points.begin(), cloudIn1.points.end(),
-                          cloudIn2.points.begin(), cloudIn2.points.end(),                  
-                          std::back_inserter(intersection_set),
-                          spatial_temporal::compPoints);
+    // std::set_intersection(cloudIn1.points.begin(), cloudIn1.points.end(),
+    //                       cloudIn2.points.begin(), cloudIn2.points.end(),                  
+    //                       std::back_inserter(intersection_set),
+    //                       spatial_temporal::compPoints);
 
-    float inter_size = intersection_set.size();
-    float union_size = union_set.size();
+    // float inter_size = intersection_set.size();
+    // float union_size = union_set.size();
+    
+    int inter_size = 0;
+    for(int i=0; i < cloudIn1.points.size(); i++){
+        for(int j=0; j < cloudIn2.points.size(); j++){
+            if (fabs(cloudIn1.points[i].x - cloudIn2.points[j].x) < 0.001 &&
+                fabs(cloudIn1.points[i].y - cloudIn2.points[j].y) < 0.001 &&
+                fabs(cloudIn1.points[i].z - cloudIn2.points[j].z) < 0.001){
+                inter_size++;
+            }
+        }
+    }
+
+    int union_size = (cloudIn1.points.size() + cloudIn2.points.size()) - inter_size;
+
 
     ROS_DEBUG("Intersection size: %f", inter_size);
     ROS_DEBUG("Union size: %f", union_size);
 
-    return inter_size / union_size;         // compute jaccard
+    return ((float) inter_size) / ((float)union_size);         // compute jaccard
 }
 
 
@@ -423,8 +439,8 @@ void spatial_temporal::Extractor::publishClusterTextMarker(int marker_id, geomet
     marker.scale.y = 0.5;
     marker.scale.z = 0.3;
 
-    marker.color.r = 0.0f;
-    marker.color.g = 1.0f;
+    marker.color.r = 1.0f;
+    marker.color.g = 0.85f;
     marker.color.b = 0.0f;
     marker.color.a = 1.0;
 
@@ -444,19 +460,20 @@ void spatial_temporal::Extractor::computeSpatialTemporalFeatures(){
     }
 
     if (current_clusters_.empty()){
-        for (int i=0; i< clusters.size(); i++){
+        for (int i=0; i < clusters.size(); i++){
             current_clusters_.push_back(new sensor_msgs::PointCloud2(clusters[i]));
         }
     }
 
     Eigen::MatrixXd eigenvects(3, clusters.size());      // Holds all eigenvectors;
 
-    std::stringstream stream;
-    stream << "Number of clusters: " << clusters.size() << "\tCurrent clusters: " << current_clusters_.size();
-    saveToLogFile(stream.str());
+    // std::stringstream stream;
+    // stream << "Number of clusters: " << clusters.size() << "\tCurrent clusters: " << current_clusters_.size();
+    // saveToLogFile(stream.str());
     
+    std::vector<float> substitutions(current_clusters_.size(),-500);    
     for(int i=0; i < clusters.size(); i++){
-        ROS_DEBUG("Processing cluster %d", i);
+        ROS_WARN("Processing cluster %d \t Number of Clusters in list: %lu", i, current_clusters_.size());
         Eigen::VectorXd eigenvect = getClusterSmallestEigenvector(clusters[i]);
         eigenvects.col(i) << eigenvect(0), eigenvect(1), eigenvect(2);
         geometry_msgs::Point mean = computeClusterMean(clusters[i]);
@@ -468,30 +485,47 @@ void spatial_temporal::Extractor::computeSpatialTemporalFeatures(){
         }
 
         std::pair <int,float> maxSim = *std::max_element(similarities.begin(), similarities.end(), compPair);
-        
+        float angle = getAngleWithNormal(eigenvect);
+
         if (maxSim.second != 0){
             current_clusters_[maxSim.first] = new sensor_msgs::PointCloud2(clusters[i]);
+            substitutions[maxSim.first] = angle;
         }else{
             current_clusters_.push_back(new sensor_msgs::PointCloud2(clusters[i]));
             ROS_WARN("Similarity is zero for cluster %d. Adding new cluster", i);
+            substitutions.push_back(angle);
         }
 
-        float angle = getAngleWithNormal(eigenvect);
+        for (int j = 0; j < similarities.size(); j++){
+            ROS_WARN("Idx: %d\t Jaccard: %f", similarities[j].first, similarities[j].second);
+        }
 
-        std::stringstream stream;
-        stream << maxSim.first << "," << angle;
-        saveToLogFile(stream.str());
+        ROS_WARN("-------");
 
          // publish markers
         cloudClusterPublisher_.publish(clusters[i]);
-        publishEigenvectorMarker(clusters[i].header, eigenvect, i, mean);
+
+        publishEigenvectorMarker(clusters[i].header, eigenvect, i, mean, 5);
 
         publishClusterTextMarker(i, mean);
     }
+
+    std::stringstream stream;
+    for (int i = 0; i < substitutions.size(); i++) {
+        if (substitutions[i] == -500) continue;
+        stream << i << "," << win_stamp_counter_ << "," << substitutions[i] << std::endl;
+    }
+    
+    saveToLogFile(stream.str());
+    win_stamp_counter_++;
 }
 
 float spatial_temporal::Extractor::getAngleWithNormal(Eigen::VectorXd &eigenvect){
     // compute dot product between eigenvect and plane_normal
+
+    if (eigenvect(2) > 0)
+        eigenvect = eigenvect * -1;
+
     double dot = eigenvect.dot(plane_normal_);
     double cosine = dot / (eigenvect.norm() * plane_normal_.norm());
     float angle = acos(cosine) * 180.0 / PI;
@@ -540,7 +574,7 @@ Eigen::VectorXd spatial_temporal::Extractor::computeSteepestDirection(Cloud2List
         #pragma omp critical
         cloudClusterPublisher_.publish(clusters[i]);
         geometry_msgs::Point mean = computeClusterMean(clusters[i]);
-        publishEigenvectorMarker(clusters[i].header, eigenvect, i, mean);
+        publishEigenvectorMarker(clusters[i].header, eigenvect, i, mean, 0.1);
     }
 
 
@@ -575,9 +609,9 @@ void spatial_temporal::Extractor::laserCallback(const sensor_msgs::LaserScan::Co
         onRunningWindow_ = false;
         saveToLogFile("--");
         clearWindowCloudList();
-
         clearCurrentClusterList();
-        process_counter_ = 0;
+        window_counter_++;
+        win_stamp_counter_ = 0;
         return;
     }
 
@@ -592,8 +626,6 @@ void spatial_temporal::Extractor::laserCallback(const sensor_msgs::LaserScan::Co
 
     // Compute running window features
     computeSpatialTemporalFeatures();
-
-    process_counter_++;
 
 }
 
