@@ -2,22 +2,19 @@
 
 
 MotionVariance::MotionVariance(ros::NodeHandle nh, std::string scan_topic, float window_duration, std::string log_filename)
-: Extractor(nh, scan_topic, window_duration, log_filename)
-{
+: Extractor(nh, scan_topic, window_duration, log_filename){
     initRosComunication();
 }
 
 MotionVariance::MotionVariance(ros::NodeHandle nh, std::string scan_topic, float window_duration):
-Extractor(nh, scan_topic,  window_duration)
-{
+Extractor(nh, scan_topic,  window_duration){
     initRosComunication();
  }
 
 MotionVariance::~MotionVariance()
 { /*    */ }
 
-void MotionVariance::initRosComunication()
-{
+void MotionVariance::initRosComunication(){
     //blob_sub_ = nodeHandle().subscribe("/blob_detection", 1, &MotionVariance::blobDetectionCallback, this);
     variance_pub_ = nodeHandle().advertise<player_tracker::TrackVariance>("/track_variance", 10);
     player_track_sub_ = nodeHandle().subscribe("/players_tracked", 1, &MotionVariance::trackCallback, this);
@@ -96,8 +93,7 @@ void MotionVariance::blobDetectionCallback(const player_tracker::Blob &msg)
      */
 }
 
-void MotionVariance::convertClouds(Cloud2List &clusters, PointCloudList &clouds)
-{
+void MotionVariance::convertClouds(Cloud2List &clusters, PointCloudList &clouds){
     #pragma omp parallel for
     for (int i = 0; i < clusters.size(); i++) {
         sensor_msgs::convertPointCloud2ToPointCloud(clusters[i], clouds[i]);

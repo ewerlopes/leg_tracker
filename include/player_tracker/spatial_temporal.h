@@ -79,6 +79,9 @@
 #include <algorithm>    // std::sort
 #include <iterator>
 #include <utility>      // std::pair
+#include <cmath>       /* acos */
+
+#define PI 3.14159265
 
 typedef std::vector<sensor_msgs::PointCloud2> Cloud2List;
 typedef std::vector<sensor_msgs::PointCloud2> PointCloud2List;
@@ -101,7 +104,12 @@ struct{
     bool operator()(const geometry_msgs::Point32 &a, const geometry_msgs::Point32 &b){
         return ( a.x<b.x && a.y<b.y && a.z<b.z );
     }
-}comparator;
+}compPoints;
+
+struct{
+  bool operator() (std::pair <int,float> i , std::pair <int,float> j) {
+      return i.second < j.second; }
+} compPair;
 
 /**
 *  @class Extractor
@@ -207,11 +215,29 @@ public:
     void publishVariance(MinimalPointCloud &minimalCloud);
 
     /**
+    *  @brief Complete Me
+    *  @param cloud the cloud to append
+    */  
+    void clearCurrentClusterList();
+
+     /**
+    *  @brief Complete Me
+    *  @param cloud the cloud to append
+    */  
+    void publishClusterTextMarker(int marker_id, geometry_msgs::Point position);
+
+    /**
     *  @brief Computes Jaccard Similarity between two CloudPoints.
     *  @param cloud1 1st cloud point.
     *  @param cloud2 2nd cloud point.
     */  
     float computeJaccardSimilarity(sensor_msgs::PointCloud &cloudIn1, sensor_msgs::PointCloud &cloudIn2);
+
+    /**
+    *  @brief Compute angle between eigenvector and normal.
+    *  @param eigenvect the eigenvector.
+    */
+    float getAngleWithNormal(Eigen::VectorXd &eigenvect);
 
     /**
     *  @brief Assemble PointClouds.
@@ -334,6 +360,7 @@ private:
     std::string baseFrame_;                   ///< robot base frame
     std::ofstream logFile_;                   ///< log file stream
     bool onRunningWindow_;                    ///< a flag to tell whether we have a current windows running.
+    int process_counter_;                     ///< tracks how many times a windows is processed
 
     ros::NodeHandle nh_;                      ///< private ROS node handle
     ros::Subscriber laserScanSubscriber_;     ///< subscriber object for LaserScan messages
@@ -341,6 +368,7 @@ private:
     ros::Publisher laserToCloudPublisher_;    ///< publisher object for LaserScan as PointCloud
     ros::Publisher assembledCloudPublisher_;  ///< publisher object for assembled PointClouds
     ros::Publisher cloudClusterPublisher_;    ///< publisher object for clusters found in a merged PointCloud.
+    ros::Publisher cloudClusterTextPublisher_;///< publisher object for text clusters found in a merged PointCloud.
     ros::Publisher legCloudPublisher_;        ///< publisher object for leg clouds
     ros::Publisher markerPublisher_;          ///< publisher object for markers.
     ros::Duration windowDuration_;            ///< slide window duration.
@@ -353,7 +381,7 @@ private:
     laser_geometry::LaserProjection projector_;                 ///< object to transform LaserScan data.
 
     PointCloudList cloudsInWindow;    // TOTO eliminate this variable?
-    PointCloud2List current_clusters_;
+    std::vector<sensor_msgs::PointCloud2*> current_clusters_;
 
     Eigen::Vector3d plane_normal_;             ///< XYZ plane normal.
 
