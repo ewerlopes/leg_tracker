@@ -409,8 +409,8 @@ float spatial_temporal::Extractor::computeJaccardSimilarity(sensor_msgs::PointCl
     int union_size = (cloudIn1.points.size() + cloudIn2.points.size()) - inter_size;
 
 
-    ROS_DEBUG("Intersection size: %f", inter_size);
-    ROS_DEBUG("Union size: %f", union_size);
+    ROS_DEBUG("Intersection size: %d", inter_size);
+    ROS_DEBUG("Union size: %d", union_size);
 
     return ((float) inter_size) / ((float)union_size);         // compute jaccard
 }
@@ -473,7 +473,7 @@ void spatial_temporal::Extractor::computeSpatialTemporalFeatures(){
     
     std::vector<float> substitutions(current_clusters_.size(),-500);    
     for(int i=0; i < clusters.size(); i++){
-        ROS_WARN("Processing cluster %d \t Number of Clusters in list: %lu", i, current_clusters_.size());
+        ROS_DEBUG("Processing cluster %d \t Number of Clusters in list: %lu", i, current_clusters_.size());
         Eigen::VectorXd eigenvect = getClusterSmallestEigenvector(clusters[i]);
         eigenvects.col(i) << eigenvect(0), eigenvect(1), eigenvect(2);
         geometry_msgs::Point mean = computeClusterMean(clusters[i]);
@@ -492,15 +492,15 @@ void spatial_temporal::Extractor::computeSpatialTemporalFeatures(){
             substitutions[maxSim.first] = angle;
         }else{
             current_clusters_.push_back(new sensor_msgs::PointCloud2(clusters[i]));
-            ROS_WARN("Similarity is zero for cluster %d. Adding new cluster", i);
+            ROS_DEBUG("Similarity is zero for cluster %d. Adding new cluster", i);
             substitutions.push_back(angle);
         }
 
         for (int j = 0; j < similarities.size(); j++){
-            ROS_WARN("Idx: %d\t Jaccard: %f", similarities[j].first, similarities[j].second);
+            ROS_DEBUG("Idx: %d\t Jaccard: %f", similarities[j].first, similarities[j].second);
         }
 
-        ROS_WARN("-------");
+        ROS_DEBUG("-------");
 
          // publish markers
         cloudClusterPublisher_.publish(clusters[i]);
@@ -638,7 +638,7 @@ void spatial_temporal::Extractor::clearWindowCloudList(){
 }
 
 void spatial_temporal::Extractor::clearCurrentClusterList(){
-    ROS_WARN("Cleaning current_clusters_ list.");
+    ROS_DEBUG("Cleaning current_clusters_ list.");
     for(int i=0; i< current_clusters_.size(); i++){
         delete current_clusters_[i];
     }

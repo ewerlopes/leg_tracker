@@ -79,6 +79,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 add_message_files(
   FILES
+  TowerArray.msg
   TrackVariance.msg
   Blob.msg
   Person.msg
@@ -100,6 +101,8 @@ generate_messages(
 # )
 
 catkin_package(
+  CATKIN_DEPENDS
+  message_runtime
   DEPENDS
     OpenMP
     message_runtime
