@@ -9,9 +9,10 @@ int main(int argc, char **argv) {
     ros::init(argc, argv, "motion_detection_algorithm");
 
     ros::NodeHandle nh;
-    std::string scan_topic;
-    nh.param("scan_topic", scan_topic, std::string("scan"));
-    spatial_temporal::Extractor ext(nh, scan_topic, 1, "/home/airlab/Scaricati/log_file.txt");
+    std::string scan_topic, filename;
+    nh.param<std::string>("scan_topic", scan_topic, "scan");
+    nh.param<std::string>("filename", filename, "log_file.txt");
+    spatial_temporal::Extractor ext(nh, scan_topic, 1, filename);
 
     //spatial_temporal::Extractor ext(nh, scan_topic, 1);
 
