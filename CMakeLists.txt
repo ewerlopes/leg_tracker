@@ -256,19 +256,25 @@ target_link_libraries(
 target_compile_options(spatial_temporal_node PRIVATE ${OpenMP_FLAGS})
 add_dependencies(spatial_temporal_node ${catkin_EXPORTED_TARGETS})
 
+add_executable(cluster_logger src/ClusterLogger.cpp src/cluster_logger_node.cpp)
+target_link_libraries(cluster_logger ${catkin_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES} ${OpenMP_LIBS})
+target_compile_options(cluster_logger PRIVATE ${OpenMP_FLAGS})
+add_dependencies(cluster_logger ${catkin_EXPORTED_TARGETS})
+
+##########################
+# optitrack_to_tf_node
+##########################
+
+add_executable(optitrack_to_tf_node src/optitrack_to_tf_node.cpp)
+target_link_libraries(optitrack_to_tf_node ${catkin_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES} ${OpenMP_LIBS})
+target_compile_options(optitrack_to_tf_node PRIVATE ${OpenMP_FLAGS})
+add_dependencies(optitrack_to_tf_node ${catkin_EXPORTED_TARGETS})
+
 ##########################
 # cloud_cluster
 ##########################
-add_executable(
-    cloud_cluster
-    src/cloud_cluster.cpp
-)
-
-target_link_libraries(
-  cloud_cluster
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-)
+add_executable(cloud_cluster src/cloud_cluster.cpp)
+target_link_libraries(cloud_cluster ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 
 add_dependencies(test_local_occupancy_grid_mapping ${PROJECT_NAME}_generate_messages_cpp)
 add_dependencies(local_occupancy_grid_mapping ${PROJECT_NAME}_generate_messages_cpp)
