@@ -3,7 +3,7 @@
 
 spatial_temporal::Extractor::Extractor(ros::NodeHandle nh, std::string scanTopic, float windowDuration, std::string logFilename)
     : nh_(nh), scanTopic_(scanTopic), windowDuration_(windowDuration), onRunningWindow_(false), window_counter_(0), win_stamp_counter_(0){
-    
+
     ros::NodeHandle nh_private("~");
     logFile_.open(logFilename);
     baseFrame_ = "odom";
@@ -13,7 +13,7 @@ spatial_temporal::Extractor::Extractor(ros::NodeHandle nh, std::string scanTopic
 
 spatial_temporal::Extractor::Extractor(ros::NodeHandle nh, std::string scanTopic, float windowDuration)
     : nh_(nh), scanTopic_(scanTopic), windowDuration_(windowDuration), onRunningWindow_(false), window_counter_(0), win_stamp_counter_(0){
-    
+
     ros::NodeHandle nh_private("~");
     baseFrame_ = "odom";
     plane_normal_.col(0) << 0, 0, 1;
@@ -22,15 +22,15 @@ spatial_temporal::Extractor::Extractor(ros::NodeHandle nh, std::string scanTopic
 
 void spatial_temporal::Extractor::initRosComunication()
 {
-    laserScanSubscriber_    = nh_.subscribe("/scan", 1, &Extractor::laserCallback, this);
-    legArraySubscriber_     = nh_.subscribe("detected_leg_clusters", 1, &Extractor::legArrayCallback, this);
+    laserScanSubscriber_       = nh_.subscribe("/scan", 1, &Extractor::laserCallback, this);
+    legArraySubscriber_        = nh_.subscribe("detected_leg_clusters", 1, &Extractor::legArrayCallback, this);
 
-    assembledCloudPublisher_= nh_.advertise<sensor_msgs::PointCloud>("assembled_cloud", 10);
-    laserToCloudPublisher_  = nh_.advertise<sensor_msgs::PointCloud>("laser_cloud", 10);
-    cloudClusterPublisher_  = nh_.advertise<sensor_msgs::PointCloud2>("clusters", 10);
+    assembledCloudPublisher_   = nh_.advertise<sensor_msgs::PointCloud>("assembled_cloud", 10);
+    laserToCloudPublisher_     = nh_.advertise<sensor_msgs::PointCloud>("laser_cloud", 10);
+    cloudClusterPublisher_     = nh_.advertise<sensor_msgs::PointCloud2>("clusters", 10);
     cloudClusterTextPublisher_ = nh_.advertise<visualization_msgs::Marker>("cluster_text", 10);
-    legCloudPublisher_      = nh_.advertise<sensor_msgs::PointCloud>("leg_cloud", 10);
-    markerPublisher_        = nh_.advertise<visualization_msgs::Marker>("eigenvector_marker", 20);
+    legCloudPublisher_         = nh_.advertise<sensor_msgs::PointCloud>("leg_cloud", 10);
+    markerPublisher_           = nh_.advertise<visualization_msgs::Marker>("eigenvector_marker", 20);
 
     ros::service::waitForService("assemble_scans");
     assembleScanServiceClient_ = nh_.serviceClient<laser_assembler::AssembleScans>("assemble_scans");
@@ -69,7 +69,7 @@ void spatial_temporal::Extractor::publishAssembledCloud(sensor_msgs::PointCloud 
     assembledCloudPublisher_.publish(cloud);
 }
 
-void spatial_temporal::Extractor::publishEigenvectorMarker(std_msgs::Header header, Eigen::VectorXd eigenvect, 
+void spatial_temporal::Extractor::publishEigenvectorMarker(std_msgs::Header header, Eigen::VectorXd eigenvect,
                                                            int marker_id, geometry_msgs::Point offset, float marker_lifetime){
     // Publish marker to rviz
     visualization_msgs::Marker m;
@@ -152,6 +152,8 @@ void spatial_temporal::Extractor::saveCloudDataToLog(sensor_msgs::PointCloud &cl
 }
 
 void spatial_temporal::Extractor::legArrayCallback(const player_tracker::LegArray::ConstPtr &legArrayMsg){
+
+    lastLegTime = (ros::Time::now().toSec() - startTime_.toSec());
     #pragma omp parallel for
     for (int i=0; i < legArrayMsg->legs.size(); i++){
         sensor_msgs::PointCloud cloud;
@@ -161,7 +163,7 @@ void spatial_temporal::Extractor::legArrayCallback(const player_tracker::LegArra
         try{
             tfListener_.waitForTransform("base_link", "odom", ros::Time(0.0), ros::Duration(0.1));
             tfListener_.transformPointCloud("odom", cloud, cloud);
-            setTemporalDimension(cloud, (ros::Time::now().toSec() - startTime_.toSec()));
+            setTemporalDimension(cloud, lastLegTime); // (ros::Time::now().toSec() - startTime_.toSec())
             #pragma omp critical
             legCloudPublisher_.publish(cloud);
         }catch (std::exception& ex){
@@ -170,7 +172,8 @@ void spatial_temporal::Extractor::legArrayCallback(const player_tracker::LegArra
     }
 }
 
-geometry_msgs::Point spatial_temporal::Extractor::computeClusterMean(sensor_msgs::PointCloud2 &input){
+geometry_msgs::Point spatial_temporal::Extractor::computeClusterMean(sensor_msgs::PointCloud2 &input)
+{
     sensor_msgs::PointCloud cloud;
     if (sensor_msgs::convertPointCloud2ToPointCloud(input, cloud)){
         geometry_msgs::Point sum;
@@ -180,6 +183,27 @@ geometry_msgs::Point spatial_temporal::Extractor::computeClusterMean(sensor_msgs
             sum.y += cloud.points[i].y * factor;
             sum.z += cloud.points[i].z * factor;
         }
+        return sum;
+    }else{
+        ROS_ERROR("ERROR WHEN GETTING PointCloud2 to PointCloud CONVERSION!");
+    }
+}
+
+geometry_msgs::Point spatial_temporal::Extractor::computeClusterMeanForTime(sensor_msgs::PointCloud2 &input, unsigned int time)
+{
+    sensor_msgs::PointCloud cloud;
+    if (sensor_msgs::convertPointCloud2ToPointCloud(input, cloud)){
+        geometry_msgs::Point sum;
+        float counter = 0;
+        for (int i=0; i < cloud.points.size(); i++) {
+            if (cloud.points[i].z >= lastLegTime) { // lastCloudTime
+                sum.x += cloud.points[i].x;
+                sum.y += cloud.points[i].y;
+                counter++;
+            }
+        }
+        sum.x /= counter;
+        sum.y /= counter;
         return sum;
     }else{
         ROS_ERROR("ERROR WHEN GETTING PointCloud2 to PointCloud CONVERSION!");
@@ -270,7 +294,7 @@ Cloud2List spatial_temporal::Extractor::getClusters(sensor_msgs::PointCloud2 &in
         cloud_cluster->width = cloud_cluster->points.size();
         cloud_cluster->height = 1;
         cloud_cluster->is_dense = true;
-        
+
         // Convert the pointcloud to be used in ROS
         sensor_msgs::PointCloud2::Ptr output(new sensor_msgs::PointCloud2);
         pcl::toROSMsg(*cloud_cluster, *output);
@@ -318,7 +342,7 @@ Eigen::MatrixXd::Index spatial_temporal::Extractor::findSteepestEigenvector(Eige
 
 void spatial_temporal::Extractor::saveProjectionToFile(){
      Cloud2List clusters = getClustersInWindow();
-    
+
     if (clusters.empty()) {
         ROS_DEBUG("ON computeSpatialTemporalFeatures: No clusters found. Skipping...");
         return;
@@ -346,7 +370,7 @@ void spatial_temporal::Extractor::saveProjectionToFile(){
 
 std::vector<std::pair <int,float>> spatial_temporal::Extractor::getSimilarity(sensor_msgs::PointCloud2 &cluster){
     sensor_msgs::PointCloud cluster_converted;
-    
+
     if(!sensor_msgs::convertPointCloud2ToPointCloud(cluster, cluster_converted)){
         ROS_ERROR("Error when converting clusters for comparison.");
     }
@@ -361,7 +385,7 @@ std::vector<std::pair <int,float>> spatial_temporal::Extractor::getSimilarity(se
         if(!sensor_msgs::convertPointCloud2ToPointCloud(*ptcloud, c)){
             ROS_ERROR("Error when converting clusters for comparison.");
         }
-        
+
         ROS_DEBUG("New cluster #points: %lu", cluster_converted.points.size());
         ROS_DEBUG("On bag #points: %lu", c.points.size());
 
@@ -383,18 +407,18 @@ float spatial_temporal::Extractor::computeJaccardSimilarity(sensor_msgs::PointCl
     // std::vector<geometry_msgs::Point32> intersection_set;
 
     // std::set_union(cloudIn1.points.begin(), cloudIn1.points.end(),
-    //                cloudIn2.points.begin(), cloudIn2.points.end(),                  
+    //                cloudIn2.points.begin(), cloudIn2.points.end(),
     //                std::back_inserter(union_set),
     //                spatial_temporal::compPoints);
-    
+
     // std::set_intersection(cloudIn1.points.begin(), cloudIn1.points.end(),
-    //                       cloudIn2.points.begin(), cloudIn2.points.end(),                  
+    //                       cloudIn2.points.begin(), cloudIn2.points.end(),
     //                       std::back_inserter(intersection_set),
     //                       spatial_temporal::compPoints);
 
     // float inter_size = intersection_set.size();
     // float union_size = union_set.size();
-    
+
     int inter_size = 0;
     for(int i=0; i < cloudIn1.points.size(); i++){
         for(int j=0; j < cloudIn2.points.size(); j++){
@@ -450,10 +474,10 @@ void spatial_temporal::Extractor::publishClusterTextMarker(int marker_id, geomet
 }
 
 
-void spatial_temporal::Extractor::computeSpatialTemporalFeatures(){
+void spatial_temporal::Extractor::computeSpatialTemporalFeatures() {
 
     Cloud2List clusters = getClustersInWindow();
-    
+
     if (clusters.empty()) {
         ROS_DEBUG("ON computeSpatialTemporalFeatures: No clusters found. Skipping...");
         return;
@@ -470,33 +494,37 @@ void spatial_temporal::Extractor::computeSpatialTemporalFeatures(){
     // std::stringstream stream;
     // stream << "Number of clusters: " << clusters.size() << "\tCurrent clusters: " << current_clusters_.size();
     // saveToLogFile(stream.str());
-    
-    std::vector<float> substitutions(current_clusters_.size(),-500);    
-    for(int i=0; i < clusters.size(); i++){
+
+    std::vector<float> substitutions(current_clusters_.size(),-500);
+    std::vector<geometry_msgs::Point> means(current_clusters_.size());
+    for(int i = 0; i < clusters.size(); i++) {
         ROS_WARN("Processing cluster %d \t Number of Clusters in list: %lu", i, current_clusters_.size());
         Eigen::VectorXd eigenvect = getClusterSmallestEigenvector(clusters[i]);
         eigenvects.col(i) << eigenvect(0), eigenvect(1), eigenvect(2);
         geometry_msgs::Point mean = computeClusterMean(clusters[i]);
-        
-        std::vector<std::pair <int,float>> similarities = getSimilarity(clusters[i]);
 
-        if (similarities.empty()){
+
+        std::vector<std::pair<int,float>> similarities = getSimilarity(clusters[i]);
+
+        if (similarities.empty()) {
             ROS_DEBUG("Empty. Size of clusters: %lu", current_clusters_.size()); //cannot be empty
         }
 
-        std::pair <int,float> maxSim = *std::max_element(similarities.begin(), similarities.end(), compPair);
+        std::pair<int,float> maxSim = *std::max_element(similarities.begin(), similarities.end(), compPair);
         float angle = getAngleWithNormal(eigenvect);
 
-        if (maxSim.second != 0){
+        if (maxSim.second != 0) {
             current_clusters_[maxSim.first] = new sensor_msgs::PointCloud2(clusters[i]);
             substitutions[maxSim.first] = angle;
-        }else{
+            means[maxSim.first] = computeClusterMeanForTime(clusters[i], win_stamp_counter_);
+        } else {
             current_clusters_.push_back(new sensor_msgs::PointCloud2(clusters[i]));
             ROS_WARN("Similarity is zero for cluster %d. Adding new cluster", i);
             substitutions.push_back(angle);
+            means.push_back(computeClusterMeanForTime(clusters[i], win_stamp_counter_));
         }
 
-        for (int j = 0; j < similarities.size(); j++){
+        for (int j = 0; j < similarities.size(); j++) {
             ROS_WARN("Idx: %d\t Jaccard: %f", similarities[j].first, similarities[j].second);
         }
 
@@ -510,12 +538,13 @@ void spatial_temporal::Extractor::computeSpatialTemporalFeatures(){
         publishClusterTextMarker(i, mean);
     }
 
+    ros::Time tm = ros::Time::now();
     std::stringstream stream;
     for (int i = 0; i < substitutions.size(); i++) {
         if (substitutions[i] == -500) continue;
-        stream << i << "," << win_stamp_counter_ << "," << substitutions[i] << std::endl;
+        stream << tm.sec << "." << tm.nsec << "," << win_stamp_counter_ << "," << i << "," << substitutions[i] << "," << means[i].x << "," << means[i].y << std::endl;
     }
-    
+
     saveToLogFile(stream.str());
     win_stamp_counter_++;
 }
@@ -604,10 +633,10 @@ void spatial_temporal::Extractor::laserCallback(const sensor_msgs::LaserScan::Co
         onRunningWindow_ = true;
         startTime_ = scanMsg->header.stamp;
 
-    } else if ((scanMsg->header.stamp.toSec() - startTime_.toSec()) > windowDuration_.toSec()) {
+    } else if (win_stamp_counter_ == 10) {
         ROS_DEBUG("End of windows...");
         onRunningWindow_ = false;
-        saveToLogFile("--");
+        saveToLogFile("#,#,#,#,#,#");
         clearWindowCloudList();
         clearCurrentClusterList();
         window_counter_++;
@@ -618,8 +647,9 @@ void spatial_temporal::Extractor::laserCallback(const sensor_msgs::LaserScan::Co
     cloud = laserMsgAsPointCloud(scanMsg);
     appendWindowCloudList(cloud);
 
+    lastCloudTime = (scanMsg->header.stamp.toSec() - startTime_.toSec());
     // set time dimension
-    setTemporalDimension(cloud, (scanMsg->header.stamp.toSec() - startTime_.toSec()));
+    setTemporalDimension(cloud, lastCloudTime);
 
     // publish point cloud
     laserToCloudPublisher_.publish(cloud);

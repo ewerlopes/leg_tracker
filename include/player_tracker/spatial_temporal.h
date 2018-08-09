@@ -1,18 +1,18 @@
 #ifndef PLAYER_TRACKER_SPATIAL_TEMPORAL_H_
 #define PLAYER_TRACKER_SPATIAL_TEMPORAL_H_
 
-/** 
+/**
  *  @file    spatial_temporal.h
  *  @author  Ewerton Lopes
  *  @author  Luca Morreale
- *  @date    15/02/2018  
- *  @version 1.0 
- *  
+ *  @date    15/02/2018
+ *  @version 1.0
+ *
  *  @brief extracts spatial-temporal features from Laser data.
  *
  *  @section DESCRIPTION
- *  This program reuse some spatial-temporal modeling ideas from 
- *  Shen, Xiaotong, Seong-Woo Kim, and Marcelo H. Ang. "Spatio-temporal 
+ *  This program reuse some spatial-temporal modeling ideas from
+ *  Shen, Xiaotong, Seong-Woo Kim, and Marcelo H. Ang. "Spatio-temporal
  *  motion features for laser-based moving objects detection and tracking.
  *  In IEEE/RSJ Internation Conference on Intelligent Robots and Systems (IROS 2014).
  *  September 14-18, Chicago, IL, USA.
@@ -138,7 +138,7 @@ public:
     *  @brief Destructor
     */
     ~Extractor();
-    
+
     /**
     *  @brief Setup publishers and subscriber nodes.
     */
@@ -148,14 +148,14 @@ public:
     *  @brief Publish a CloudPoint composed by a set of other PointClouds.
     *  @param from the start time of composing clouds.
     *  @param to the end time of composing clouds.
-    */    
+    */
     void publishAssembledCloud(ros::Time from, ros::Time to);
 
     /**
     *  @brief Publish a CloudPoint composed by a set of other PointClouds.
     *  @param from the start time of composing clouds.
     *  @param to the end time of composing clouds.
-    */  
+    */
     void publishAssembledCloud(sensor_msgs::PointCloud cloud);
 
     /**
@@ -164,7 +164,7 @@ public:
     *  @param eigenvect eigenvector
     *  @param marker_id marker id
     *  @param offset an offset to the tail of the arrow.
-    */  
+    */
     void publishEigenvectorMarker(std_msgs::Header header, Eigen::VectorXd eigenvect,
                                   int marker_id, geometry_msgs::Point offset, float marker_lifetime);
 
@@ -172,65 +172,65 @@ public:
     *  @brief set point cloud z (temporal) dimension.
     *  @param cloud the Pointcloud.
     *  @param time the value to set.
-    */  
+    */
     void setTemporalDimension(sensor_msgs::PointCloud &cloud, double time);
 
     /**
     *  @brief Save string to logfile.
     *  @param text the string data
-    */  
+    */
     void saveToLogFile(std::string text);
 
     /**
     *  @brief Save PointCloud data to file
     *  @param cloud the PointCloud
-    */  
+    */
     void saveCloudDataToLog(sensor_msgs::PointCloud &cloud);
 
     /**
     *  @brief Save projections to logfile.
-    */  
+    */
     void saveProjectionToFile();
 
     /**
     *  @brief Compute spatial-temporal data from current window.
-    */  
+    */
     void computeSpatialTemporalFeatures();
 
     /**
     *  @brief Clear PointCloud vector.
-    */  
+    */
     void clearWindowCloudList();
 
     /**
     *  @brief Append cloud to PointCloud list.
     *  @param cloud the cloud to append
-    */  
+    */
     void appendWindowCloudList(sensor_msgs::PointCloud &cloud);
 
     /**
     *  @brief Complete Me
     *  @param cloud the cloud to append
-    */  
+    */
     void publishVariance(MinimalPointCloud &minimalCloud);
 
     /**
     *  @brief Complete Me
     *  @param cloud the cloud to append
-    */  
+    */
     void clearCurrentClusterList();
 
      /**
     *  @brief Complete Me
     *  @param cloud the cloud to append
-    */  
+    */
     void publishClusterTextMarker(int marker_id, geometry_msgs::Point position);
 
     /**
     *  @brief Computes Jaccard Similarity between two CloudPoints.
     *  @param cloud1 1st cloud point.
     *  @param cloud2 2nd cloud point.
-    */  
+    */
     float computeJaccardSimilarity(sensor_msgs::PointCloud &cloudIn1, sensor_msgs::PointCloud &cloudIn2);
 
     /**
@@ -246,40 +246,41 @@ public:
     *  @param cloud the resulting cloud. Results in an empty cloud in case
     *               no composing clouds are available from the specified time interval.
     *  @param status return 1 if suceeded. 0 otherwise.
-    */  
+    */
     int assembledCloud(ros::Time from, ros::Time to, sensor_msgs::PointCloud &cloud);
 
     /**
     *  @brief COMPLETE ME.
     *  @param cluster
-    */  
+    */
     std::vector<std::pair <int,float>> getSimilarity(sensor_msgs::PointCloud2 &cluster);
 
     /**
     *  @brief Compute clusters in Assembled PointCloud from current windows.
-    */  
+    */
     Cloud2List getClustersInWindow();
-    
+
     /**
     *  @brief Compute clusters from PointCloud.
     *  @param input the point cloud to compute from.
-    */  
+    */
     Cloud2List getClusters(sensor_msgs::PointCloud2 &input);
-    
+
     /**
     *  @brief Publish a CloudPoint composed by a set of other PointClouds.
     *  @param from the start time of composing clouds.
     *  @param to the end time of composing clouds.
-    */  
+    */
     PointCloudList& getWindowCloudList();
-    
+
     /**
     *  @brief Publish a CloudPoint composed by a set of other PointClouds.
     *  @param from the start time of composing clouds.
     *  @param to the end time of composing clouds.
-    */  
+    */
     geometry_msgs::Point computeClusterMean(sensor_msgs::PointCloud2 &input);
-    
+    geometry_msgs::Point computeClusterMeanForTime(sensor_msgs::PointCloud2 &input, unsigned int time);
+
     /**
     *  @brief converts a LaserScan into PointCloud
     *  @param scanMsg laserScan message
@@ -292,67 +293,67 @@ public:
     *  @param eigenvect the eigenvecto to project onto.
     */
     Eigen::MatrixXd projectToEigenvector(Eigen::MatrixXd &dataset, Eigen::VectorXd &eigenvect);
-    
+
     /**
     *  @brief Publish a CloudPoint composed by a set of other PointClouds.
     *  @param from the start time of composing clouds.
     *  @param to the end time of composing clouds.
-    */  
+    */
     Eigen::MatrixXd cloudPointAsMatrix(sensor_msgs::PointCloud2 &input);
-    
+
     /**
     *  @brief Publish a CloudPoint composed by a set of other PointClouds.
     *  @param from the start time of composing clouds.
     *  @param to the end time of composing clouds.
-    */  
+    */
     Eigen::MatrixXd cloudPointAsMatrix(sensor_msgs::PointCloud &cloud);
-    
+
     /**
     *  @brief Publish a CloudPoint composed by a set of other PointClouds.
     *  @param from the start time of composing clouds.
     *  @param to the end time of composing clouds.
-    */  
+    */
     Eigen::MatrixXd computeClusterVariance(Eigen::MatrixXd &input);
-    
+
     /**
     *  @brief Publish a CloudPoint composed by a set of other PointClouds.
     *  @param from the start time of composing clouds.
     *  @param to the end time of composing clouds.
-    */  
+    */
     Eigen::MatrixXd computeClusterVariance(sensor_msgs::PointCloud2 &input);
 
     /**
     *  @brief COMPLETE ME
     *  @param from the start time of composing clouds.
     *  @param to the end time of composing clouds.
-    */  
+    */
     Eigen::MatrixXd computeMinEigenvectors(Cloud2List &clusters);
 
     /**
     *  @brief Publish a CloudPoint composed by a set of other PointClouds.
     *  @param from the start time of composing clouds.
     *  @param to the end time of composing clouds.
-    */  
+    */
     Eigen::MatrixXd::Index findSteepestEigenvector(Eigen::MatrixXd eigenvectors);
 
     /**
     *  @brief Publish a CloudPoint composed by a set of other PointClouds.
     *  @param from the start time of composing clouds.
     *  @param to the end time of composing clouds.
-    */  
+    */
     Eigen::VectorXd computeSteepestDirection(Cloud2List &clusters);
-    
+
     /**
     *  @brief Publish a CloudPoint composed by a set of other PointClouds.
     *  @param from the start time of composing clouds.
     *  @param to the end time of composing clouds.
-    */  
+    */
     Eigen::VectorXd getClusterSmallestEigenvector(Eigen::MatrixXd cov);
-    
+
     /**
     *  @brief Compute the vector with smallest eigenvalue from PointCloud.
     *  @param cluster the PointCloud cluster to compute from.
-    */  
+    */
     Eigen::VectorXd getClusterSmallestEigenvector(sensor_msgs::PointCloud2 &cluster);
 
 private:
@@ -377,7 +378,7 @@ private:
     ros::ServiceClient assembleScanServiceClient_;              ///< assemble scan service client.
 
     tf::TransformListener tfListener_;                          ///< ROS TF listener.
-    
+
     laser_assembler::AssembleScans assembleScanServiceMsg_;     ///< assemble scan service message.
     laser_geometry::LaserProjection projector_;                 ///< object to transform LaserScan data.
 
@@ -385,6 +386,9 @@ private:
     std::vector<sensor_msgs::PointCloud2*> current_clusters_;
 
     Eigen::Vector3d plane_normal_;             ///< XYZ plane normal.
+
+    double lastCloudTime;
+    double lastLegTime;
 
     /**
     *  @brief callback for LegArray message
