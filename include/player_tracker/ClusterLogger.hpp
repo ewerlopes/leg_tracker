@@ -91,7 +91,7 @@ namespace logging {
 
         virtual sensor_msgs::PointCloud transformLaserToCloud(const sensor_msgs::LaserScan::ConstPtr &scanMsg);
         virtual void setTimeToCloud(sensor_msgs::PointCloud &cloud, unsigned int laserSeq);
-        virtual void computeSpatialTemporalFeatures(unsigned int time);
+        virtual void computeSpatialTemporalFeatures(unsigned int time, PointCloud2List &lastLevelClusters);
         virtual float extractClusterAngle(sensor_msgs::PointCloud2 &cluster, Eigen::MatrixXd::ColXpr eigenCol);
         virtual float computeAngle(Eigen::VectorXd &eigenvect);
         virtual PointCloud2List getClustersInWindow();
@@ -102,12 +102,15 @@ namespace logging {
         virtual Eigen::VectorXd computeSmallestEigenvector(sensor_msgs::PointCloud2 &cluster);
 
         virtual int assembledCloud(ros::Time from, ros::Time to, sensor_msgs::PointCloud &cloud);
+        virtual PointCloud2List getClusters(sensor_msgs::PointCloud &cloud);
         virtual PointCloud2List getClusters(sensor_msgs::PointCloud2 &input);
         virtual void computeClusterIndices(std::vector<pcl::PointIndices> &cluster_indices, pcl::search::KdTree<pcl::PointXYZ>::Ptr &tree, pcl::PointCloud<pcl::PointXYZ>::Ptr &converted);
         virtual Eigen::MatrixXd computeClusterVariance(Eigen::MatrixXd &input);
         virtual Eigen::MatrixXd computeClusterVariance(sensor_msgs::PointCloud2 &input);
         virtual Eigen::MatrixXd cloudPointAsMatrix(sensor_msgs::PointCloud2 &input);
         virtual Eigen::MatrixXd cloudPointAsMatrix(sensor_msgs::PointCloud &cloud);
+
+        virtual geometry_msgs::Point computeClusterMeanForTime(sensor_msgs::PointCloud2 &input, unsigned int time);
 
     private:
         ros::NodeHandle nh;

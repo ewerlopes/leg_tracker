@@ -92,6 +92,7 @@ namespace logging {
         unsigned int time = windows.back().currentNum;
 
         sensor_msgs::PointCloud cloud = transformLaserToCloud(msg);
+        PointCloud2List lastLevelClusters = getClusters(cloud);
 
         // set time dimension
         setTimeToCloud(cloud, time);
@@ -100,7 +101,7 @@ namespace logging {
         laserCloudPublisher.publish(cloud);
 
         // Compute running window features
-        computeSpatialTemporalFeatures(time);
+        computeSpatialTemporalFeatures(time, lastLevelClusters);
     }
 
     sensor_msgs::PointCloud ClusterLogger::transformLaserToCloud(const sensor_msgs::LaserScan::ConstPtr &scanMsg)
@@ -127,14 +128,15 @@ namespace logging {
     {
         #pragma omp parallel for
         for (int i = 0; i < cloud.points.size(); i++) {
-            cloud.points[i].z = static_cast<double>(time);
+            cloud.points[i].z = static_cast<float>(time);
         }
     }
 
 
-    void ClusterLogger::computeSpatialTemporalFeatures(unsigned int time)
+    void ClusterLogger::computeSpatialTemporalFeatures(unsigned int time, PointCloud2List &lastLevelClusters)
     {
         ros::Time now = ros::Time::now();
+        ROS_INFO_STREAM("analysis of clusters <<<<<<<<<<<<<<<<<<<<<<");
         // analysis for current clusters and clusters!!!
         PointCloud2List clusters = getClustersInWindow();
         // ROS_INFO_STREAM(time << ": cluster size " << clusters.size());
@@ -148,28 +150,66 @@ namespace logging {
 
 
         FloatList substitutions(clusters.size(), -500);
+        std::vector<geometry_msgs::Point> means(clusters.size());
         for(int i = 0; i < clusters.size(); i++) {
             // ROS_INFO_STREAM("Processing cluster " << i << "/" << clusters.size());
 
             float angle = extractClusterAngle(clusters[i], eigenvects.col(i));
             IntFloatList similarities = computeSimilarity(clusters[i], clusters);
 
-            std::pair <int,float> maxSim = *std::max_element(similarities.begin(), similarities.end(), compPair);
+            geometry_msgs::Point mean = computeClusterMeanForTime(clusters[i], time);
+            // store mean
+
+            std::pair<int,float> maxSim = *std::max_element(similarities.begin(), similarities.end(), compPair);
 
             if (maxSim.second != 0) {
                 substitutions[maxSim.first] = angle;
+                means[maxSim.first] = mean;
             } else {
                 substitutions.push_back(angle);
+                means.push_back(mean);
             }
         }
+
+        // std::vector<geometry_msgs::Point> means = computeMeans(lastLevelClusters);
+        // std::vector<geometry_msgs::Point> association(clusters.size());
+        // for(int i = 0; i < lastLevelClusters.size(); i++) {
+        //     IntFloatList similarities = computeSimilarity(lastLevelClusters[i], clusters);
+
+        //     std::pair<int,float> maxSim = *std::max_element(similarities.begin(), similarities.end(), compPair);
+        //     association[maxSim.first] = means[i];
+        // }
 
         std::stringstream stream;
         for (int i = 0; i < substitutions.size(); i++) {
             if (substitutions[i] == -500) continue;
-            stream << now.sec << "." << now.nsec << "," << i << "," << time << "," << substitutions[i] << std::endl; // mancano x ed y
+            stream << now.sec << "." << now.nsec << "," << time << "," << "," << i << substitutions[i] << "," << means[i].x << "," << means[i].y << std::endl; // mancano x ed y
         }
 
         saveToLogFile(stream.str());
+    }
+
+    geometry_msgs::Point ClusterLogger::computeClusterMeanForTime(sensor_msgs::PointCloud2 &input, unsigned int time)
+    {
+        sensor_msgs::PointCloud cloud;
+        if (sensor_msgs::convertPointCloud2ToPointCloud(input, cloud)){
+            geometry_msgs::Point sum;
+            float counter = 0;
+            for (int i=0; i < cloud.points.size(); i++) {
+                if (cloud.points[i].z == static_cast<float>(time)) {
+                    sum.x += cloud.points[i].x;
+                    sum.y += cloud.points[i].y;
+                    counter++;
+                    // ROS_INFO_STREAM(cloud.points[i].x << " " << cloud.points[i].y << " " << cloud.points[i].z << " " << time);
+                }
+
+            }
+            sum.x /= counter;
+            sum.y /= counter;
+            return sum;
+        }else{
+            ROS_ERROR("ERROR WHEN GETTING PointCloud2 to PointCloud CONVERSION!");
+        }
     }
 
     float ClusterLogger::extractClusterAngle(sensor_msgs::PointCloud2 &cluster, Eigen::MatrixXd::ColXpr eigenCol)
@@ -199,7 +239,6 @@ namespace logging {
     PointCloud2List ClusterLogger::getClustersInWindow()
     {
         sensor_msgs::PointCloud to_merge_cloud;
-        sensor_msgs::PointCloud2 as_pointcloud_2;
 
         int mergedClouds = assembledCloud(windows.back().startTime, ros::Time::now(), to_merge_cloud);
         // ROS_INFO_STREAM("clouds " << mergedClouds);
@@ -208,17 +247,24 @@ namespace logging {
             return PointCloud2List();
         }
 
-        int convertedClouds = sensor_msgs::convertPointCloudToPointCloud2(to_merge_cloud, as_pointcloud_2);
+        return getClusters(to_merge_cloud);
+    }
+
+    PointCloud2List ClusterLogger::getClusters(sensor_msgs::PointCloud &cloud)
+    {
+        ROS_INFO_STREAM("getting cloud");
+        sensor_msgs::PointCloud2 converted;
+        int convertedClouds = sensor_msgs::convertPointCloudToPointCloud2(cloud, converted);
         if (!convertedClouds) {
             return PointCloud2List();
         }
 
-        PointCloud2List clusters = getClusters(as_pointcloud_2);
-        return clusters;
+        return getClusters(converted);
     }
 
     PointCloud2List ClusterLogger::getClusters(sensor_msgs::PointCloud2 &input)
     {
+        ROS_INFO_STREAM("getting cloud for real");
         PointCloud2List clusters;
         pcl::PCLPointCloud2 to_convert;
 
@@ -227,6 +273,8 @@ namespace logging {
 
         pcl::PointCloud<pcl::PointXYZ>::Ptr converted(new pcl::PointCloud<pcl::PointXYZ>);
         pcl::fromPCLPointCloud2(to_convert,*converted);
+
+        ROS_INFO_STREAM("same time " << converted->points[0].z);
 
         // Creating the KdTree object for the search method of the extraction
         pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
