@@ -8,10 +8,10 @@ int main(int argc, char **argv) {
     omp_set_num_threads(OMP_THREADS);
     ros::init(argc, argv, "motion_detection_algorithm");
 
-    ros::NodeHandle nh;
+    ros::NodeHandle nh, privateNH("~");
     std::string scan_topic, filename;
-    nh.param<std::string>("scan_topic", scan_topic, "scan");
-    nh.param<std::string>("filename", filename, "log_file.txt");
+    privateNH.param<std::string>("scan_topic", scan_topic, "scan");
+    privateNH.param<std::string>("filename", filename, "log_file");
     spatial_temporal::Extractor ext(nh, scan_topic, 1, filename);
 
     //spatial_temporal::Extractor ext(nh, scan_topic, 1);

@@ -10,12 +10,6 @@
     <!-- run detect_leg_clusters -->
     <node pkg="player_tracker" type="detect_leg_clusters" name="detect_leg_clusters" output="screen"/>
 
-    <node pkg="player_tracker" type="cluster_logger" name="cluster_logger" output="screen" >
-        <param name="laser_topic"   value="scanner" />
-        <param name="filename" value="$(find player_tracker)/logs/spatial_temporal_log.txt" />
-        <param name="cluster_topic" value="detected_leg_clusters" />
-    </node>
-
 
     <!-- run joint_player_tracker
     <node pkg="player_tracker" type="joint_leg_tracker.py" name="joint_leg_tracker" output="screen" /> -->
@@ -45,18 +39,18 @@
 
   <!-- launch-prefix="xterm -e gdb args"/> -->
 
-  <!-- <node pkg="player_tracker" type="motion_variance" name="motion_variance" output="screen"  required="true" /> -->
-  <node pkg="player_tracker" type="spatial_temporal_node" name="spatial_temporal_node" output="screen"  required="true" />
-      <!--<param name="scan_topic"    value="scan" />-->
-      <!--<param name="log_filename"  value="$(find player_tracker)/logs/spatial_temporal_log.txt" />-->
-  <!--</node>-->
-
-
   <node pkg="player_tracker" type="optitrack_to_tf_node" name="optitrack_to_tf_node" output="screen" >
       <param name="player_topic" value="/robot_markerset/pose" />
       <param name="player_pose"  value="/player_pose" />
       <param name="save"         value="true" />
       <param name="log_file"  value="$(find player_tracker)/logs/player_log.txt" />
+  </node>
+
+ <!-- <node pkg="player_tracker" type="motion_variance" name="motion_variance" output="screen"  required="true" /> -->
+
+  <node pkg="player_tracker" type="spatial_temporal_node" name="spatial_temporal_node" output="screen"  required="true" >
+    <param name="scan_topic" value="scan" />
+    <param name="filename"   value="$(find player_tracker)/logs/spatial_temporal_log.txt" />
   </node>
 
 
