@@ -15,13 +15,13 @@ void saveOptitrackToFileAndPublish(const geometry_msgs::PoseStamped::ConstPtr &m
 int main(int argc, char **argv) {
 
     ros::init(argc, argv, "optitrack_to_tf");
-    ros::NodeHandle nh;
+    ros::NodeHandle nh, privateNH("~");
 
     std::string optitrackTopic, optitrackFrame;
     bool saveInFile;
-    nh.param<std::string>("player_topic", optitrackTopic, "/robot_markerset/pose");
-    nh.param<std::string>("player_pose", optitrackFrame, "/player_pose");
-    nh.param<bool>("save", saveInFile, false);
+    privateNH.param<std::string>("player_topic", optitrackTopic, "/robot_markerset/pose");
+    privateNH.param<std::string>("player_pose", optitrackFrame, "/player_pose");
+    privateNH.param<bool>("save", saveInFile, false);
 
     ros::Subscriber poseSub;
 
@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
         poseSub = nh.subscribe<geometry_msgs::PoseStamped>(optitrackTopic, 10, boost::bind(&convertOptitrackDataToTF, _1, optitrackFrame));
     } else {
         std::string file;
-        nh.param<std::string>("log_file", file, "player_log.txt");
+        privateNH.param<std::string>("log_file", file, "player_log.txt");
         std::ofstream out(file);
         out.close();    // clear file
         poseSub = nh.subscribe<geometry_msgs::PoseStamped>(optitrackTopic, 10, boost::bind(&saveOptitrackToFileAndPublish, _1, optitrackFrame, file));
