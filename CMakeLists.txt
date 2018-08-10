@@ -256,10 +256,6 @@ target_link_libraries(
 target_compile_options(spatial_temporal_node PRIVATE ${OpenMP_FLAGS})
 add_dependencies(spatial_temporal_node ${catkin_EXPORTED_TARGETS})
 
-add_executable(cluster_logger src/ClusterLogger.cpp src/cluster_logger_node.cpp)
-target_link_libraries(cluster_logger ${catkin_LIBRARIES} ${Eigen3_LIBRARIES} ${PCL_LIBRARIES} ${OpenMP_LIBS})
-target_compile_options(cluster_logger PRIVATE ${OpenMP_FLAGS})
-add_dependencies(cluster_logger ${catkin_EXPORTED_TARGETS})
 
 ##########################
 # optitrack_to_tf_node
